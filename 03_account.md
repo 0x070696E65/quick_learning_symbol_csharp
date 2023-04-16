@@ -3,7 +3,7 @@
 キーペアは秘密鍵と公開鍵のペアで公開鍵を定められた形式でコンバートした物がアドレスとなります。秘密鍵を使って署名することでのみブロックチェーンのデータを更新することができます。  
 
 ## 3.1 キーペア生成
-まずは秘密鍵を作成して、秘密鍵に基づいた公開鍵を作成しましょう。  
+まずはキーペアを作成します。
 
 ### 新規生成
 ```cs
@@ -40,6 +40,7 @@ Console.WriteLine($"aliceAddress: {aliceAddress}");
 ### 秘密鍵からキーペア生成
 ```cs
 var alicePrivateKey = new PrivateKey("14311B7BEC946A28AD845FA8B565B90F52B6E0562FCC2D779D46FEB3A234****");
+var aliceKeyPair = new KeyPair(alicePrivateKey);
 ```
 
 ## 3.2 アカウントへの送信

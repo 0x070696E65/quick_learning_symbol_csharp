@@ -12,136 +12,104 @@ Aliceが起案者となりトランザクションを作成し、署名します
 
 
 ## 12.1 トランザクション作成
-```js
-bob = sym.Account.generateNewAccount(networkType);
+```cs
+var innerTx1 = new EmbeddedTransferTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    RecipientAddress = new UnresolvedAddress(bobAddress.bytes),
+    SignerPublicKey = alicePublicKey,
+    Message = Converter.Utf8ToPlainMessage("tx1"),
+};
+var innerTx2 = new EmbeddedTransferTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    RecipientAddress = new UnresolvedAddress(aliceAddress.bytes),
+    SignerPublicKey = bobPublicKey,
+    Message = Converter.Utf8ToPlainMessage("tx2"),
+};
+var innerTransactions = new IBaseTransaction[] { innerTx1, innerTx2 };
+var merkleHash = SymbolFacade.HashEmbeddedTransactions(innerTransactions);
+var aggregateTx = new AggregateCompleteTransactionV2()
+{
+    Network = NetworkType.TESTNET,
+    SignerPublicKey = alicePublicKey,
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp),
+    Transactions = innerTransactions,
+    TransactionsHash = merkleHash,
+};
+TransactionHelper.SetMaxFee(aggregateTx, 100, 1);
 
-innerTx1 = sym.TransferTransaction.create(
-    undefined,
-    bob.address, 
-    [],
-    sym.PlainMessage.create("tx1"),
-    networkType
-);
-
-innerTx2 = sym.TransferTransaction.create(
-    undefined,
-    alice.address, 
-    [],
-    sym.PlainMessage.create("tx2"),
-    networkType
-);
-
-aggregateTx = sym.AggregateTransaction.createComplete(
-    sym.Deadline.create(epochAdjustment),
-    [
-      innerTx1.toAggregate(alice.publicAccount),
-      innerTx2.toAggregate(bob.publicAccount)
-    ],
-    networkType,
-    [],
-).setMaxFeeForAggregate(100, 1);
-
-signedTx =  alice.sign(aggregateTx,generationHash);
-signedHash = signedTx.hash;
-signedPayload = signedTx.payload;
-
-console.log(signedPayload);
+var signature = facade.SignTransaction(aliceKeyPair, aggregateTx);
+TransactionsFactory.AttachSignature(aggregateTx, signature);
+var signedPayload = TransactionHelper.GetPayload(aggregateTx);
+Console.WriteLine(signedPayload);
 ```
 ###### 出力例
-```js
->580100000000000039A6555133357524A8F4A832E1E596BDBA39297BC94CD1D0728572EE14F66AA71ACF5088DB6F0D1031FF65F2BBA7DA9EE3A8ECF242C2A0FE41B6A00A2EF4B9020E5C72B0D5946C1EFEE7E5317C5985F106B739BB0BC07E4F9A288417B3CD6D26000000000198414100AF000000000000D4641CD902000000306771D758886F1529F9B61664B0450ED138B27CC5E3AE579C16D550EDEE5791B00000000000000054000000000000000E5C72B0D5946C1EFEE7E5317C5985F106B739BB0BC07E4F9A288417B3CD6D26000000000198544198A1BE13194C0D18897DD88FE3BC4860B8EEF79C6BC8C8720400000000000000007478310000000054000000000000003C4ADF83264FF73B4EC1DD05B490723A8CFFAE1ABBD4D4190AC4CAC1E6505A5900000000019854419850BF0FD1A45FCEE211B57D0FE2B6421EB81979814F629204000000000000000074783200000000
+```cs
+>5801000000000000F95F520DF1E08FA936F3C57E7150062BD8710FB8290F5076540DFBFB22D22B32AED865F591C5AFA06D3A3A4208317973AE4CA24988C6C34EACE44B62EA40700C13B00FBB13C7644E13BD786F0EA4F97820022A2606759793A5D3525A03F92A2F000000000298414100AF000000000000272F7B5403000000E1B817E8E6186A67925A0C02DC514689F6684845E8F5A6564F4E7C37072E2D84B000000000000000540000000000000013B00FBB13C7644E13BD786F0EA4F97820022A2606759793A5D3525A03F92A2F0000000001985441983AB360969797AB6030FF53A1995F43B27C56C5B456E2D90400000000000000007478310000000054000000000000004C4BD7F8E1E1AC61DB817089F9416A7EDC18339F06CDC851495B271533FAD13B0000000001985441982982FFFC666CB09288FCB4B8F820E8B0B5F77093075AEF04000000000000000074783200000000
 ```
 
-署名を行い、signedHash,signedPayloadを出力します。  
-signedPayloadをBobに渡して署名を促します。  
+署名を行い、signedPayloadを出力します。signedPayloadをBobに渡して署名を促します。  
 
 ## 12.2 Bobによる連署
 
 
 Aliceから受け取ったsignedPayloadでトランザクションを復元します。
 
-```js
-tx = sym.TransactionMapping.createFromPayload(signedPayload);
-console.log(tx);
+```cs
+var signedPayload =
+    "5801000000000000F95F520DF1E08FA936F3C57E7150062BD8710FB8290F5076540DFBFB22D22B32AED865F591C5AFA06D3A3A4208317973AE4CA24988C6C34EACE44B62EA40700C13B00FBB13C7644E13BD786F0EA4F97820022A2606759793A5D3525A03F92A2F000000000298414100AF000000000000272F7B5403000000E1B817E8E6186A67925A0C02DC514689F6684845E8F5A6564F4E7C37072E2D84B000000000000000540000000000000013B00FBB13C7644E13BD786F0EA4F97820022A2606759793A5D3525A03F92A2F0000000001985441983AB360969797AB6030FF53A1995F43B27C56C5B456E2D90400000000000000007478310000000054000000000000004C4BD7F8E1E1AC61DB817089F9416A7EDC18339F06CDC851495B271533FAD13B0000000001985441982982FFFC666CB09288FCB4B8F820E8B0B5F77093075AEF04000000000000000074783200000000";
+var tx = TransactionHelper.TransactionDeserializer(signedPayload, AggregateCompleteTransactionV2.Deserialize);
+Console.WriteLine(tx);
 ```
 ###### 出力例
-```js
-> AggregateTransaction
-    cosignatures: []
-    deadline: Deadline {adjustedValue: 12197090355}
-  > innerTransactions: Array(2)
-      0: TransferTransaction {type: 16724, networkType: 152, version: 1, deadline: Deadline, maxFee: UInt64, …}
-      1: TransferTransaction {type: 16724, networkType: 152, version: 1, deadline: Deadline, maxFee: UInt64, …}
-    maxFee: UInt64 {lower: 44800, higher: 0}
-    networkType: 152
-    payloadSize: undefined
-    signature: "4999A8437DA1C339280ED19BE0814965B73D60A1A6AF2F3856F69FBFF9C7123427757247A231EB89BB8844F37AC6F7559F859E2FDE39B8FA58A57F36DDB3B505"
-    signer: PublicAccount
-      address: Address {address: 'TBXUTAX6O6EUVPB6X7OBNX6UUXBMPPAFX7KE5TQ', networkType: 152}
-      publicKey: "D4933FC1E4C56F9DF9314E9E0533173E1AB727BDB2A04B59F048124E93BEFBD2"
-    transactionInfo: undefined
-    type: 16705
-    version: 1
+```cs
+> (signature: F95F520DF1E08FA936F3C57E7150062BD8710FB8290F5076540DFBFB22D22B32AED865F591C5AFA06D3A3A4208317973AE4CA24988C6C34EACE44B62EA40700C, signerPublicKey: 13B00FBB13C7644E13BD786F0EA4F97820022A2606759793A5D3525A03F92A2F, version: 0x2, network: NetworkType.TESTNET, type: TransactionType.AGGREGATE_COMPLETE, fee: 0x000000000000AF00, deadline: 0x00000003547B2F27, transactionsHash: E1B817E8E6186A67925A0C02DC514689F6684845E8F5A6564F4E7C37072E2D84, transactions: [(signerPublicKey: 13B00FBB13C7644E13BD786F0EA4F97820022A2606759793A5D3525A03F92A2F, version: 0x1, network: NetworkType.TESTNET, type: TransactionType.TRANSFER, recipientAddress: 983AB360969797AB6030FF53A1995F43B27C56C5B456E2D9, mosaics: [], message: hex(00747831), ),(signerPublicKey: 4C4BD7F8E1E1AC61DB817089F9416A7EDC18339F06CDC851495B271533FAD13B, version: 0x1, network: NetworkType.TESTNET, type: TransactionType.TRANSFER, recipientAddress: 982982FFFC666CB09288FCB4B8F820E8B0B5F77093075AEF, mosaics: [], message: hex(00747832), )], cosignatures: [], )
 ```
 
 念のため、Aliceがすでに署名したトランザクション（ペイロード）かどうかを検証します。
-```js
-Buffer = require("/node_modules/buffer").Buffer;
-res = tx.signer.verifySignature(
-    tx.getSigningBytes([...Buffer.from(signedPayload,'hex')],[...Buffer.from(generationHash,'hex')]),
-    tx.signature
-);
-console.log(res);
+```cs
+var res = facade.VerifyTransaction(tx, tx.Signature);
+Console.WriteLine(res);
 ```
 ###### 出力例
-```js
-> true
+```cs
+> True
 ```
 
 ペイロードがsigner、つまりAliceによって署名されたものであることが確認できました。
 次にBobが連署します。
-```js
-bobSignedTx = sym.CosignatureTransaction.signTransactionPayload(bob, signedPayload, generationHash);
-bobSignedTxSignature = bobSignedTx.signature;
-bobSignedTxSignerPublicKey = bobSignedTx.signerPublicKey;
+```cs
+var hash = facade.HashTransaction(tx, tx.Signature);
+var cosignature = new Cosignature(){
+    Signature = bobKeyPair.Sign(hash.bytes),
+    SignerPublicKey = bobPublicKey
+};
+Console.WriteLine(Converter.BytesToHex(cosignature.Serialize()));
+```
+###### 出力例
+```cs
+> 00000000000000004C4BD7F8E1E1AC61DB817089F9416A7EDC18339F06CDC851495B271533FAD13B42C6293F8E8C2490260A452E2E8493D2CF03F733AD787C500941CC0043BCFE8E577D8480588094EB878696122809F8BB6CC285F6CB7E959733A1E2BBF8860B0B
 ```
 
-CosignatureTransactionで署名を行い、bobSignedTxSignature,bobSignedTxSignerPublicKeyを出力しAliceに返却します。  
+hashに対して署名を行い、Cosignatureクラスの生成、シリアライズして16進数文字列で返します。
 Bobが全ての署名を揃えられる場合は、Aliceに返却しなくてもBobがアナウンスすることも可能です。
 
-## 12.3 Aliceによるアナウンス
+## 12.3 アナウンス
 
-AliceはBobからbobSignedTxSignature,bobSignedTxSignerPublicKeyを受け取ります。  
+AliceはBobからcosignatureHexを受け取ります。
 また事前にAlice自身で作成したsignedPayloadを用意します。  
 
-```js
-signedHash = sym.Transaction.createTransactionHash(signedPayload,Buffer.from(generationHash, 'hex'));
-cosignSignedTxs = [
-    new sym.CosignatureSignedTransaction(signedHash,bobSignedTxSignature,bobSignedTxSignerPublicKey)
-];
+```cs
+var signedPayload = "5801000000000000F95F520DF1E08FA936F3C57E7150062BD8710FB8290F5076540DFBFB22D22B32AED865F591C5AFA06D3A3A4208317973AE4CA24988C6C34EACE44B62EA40700C13B00FBB13C7644E13BD786F0EA4F97820022A2606759793A5D3525A03F92A2F000000000298414100AF000000000000272F7B5403000000E1B817E8E6186A67925A0C02DC514689F6684845E8F5A6564F4E7C37072E2D84B000000000000000540000000000000013B00FBB13C7644E13BD786F0EA4F97820022A2606759793A5D3525A03F92A2F0000000001985441983AB360969797AB6030FF53A1995F43B27C56C5B456E2D90400000000000000007478310000000054000000000000004C4BD7F8E1E1AC61DB817089F9416A7EDC18339F06CDC851495B271533FAD13B0000000001985441982982FFFC666CB09288FCB4B8F820E8B0B5F77093075AEF04000000000000000074783200000000";
+var tx = TransactionHelper.TransactionDeserializer(signedPayload, AggregateCompleteTransactionV2.Deserialize);
+var cosignatureHex = "00000000000000004C4BD7F8E1E1AC61DB817089F9416A7EDC18339F06CDC851495B271533FAD13B42C6293F8E8C2490260A452E2E8493D2CF03F733AD787C500941CC0043BCFE8E577D8480588094EB878696122809F8BB6CC285F6CB7E959733A1E2BBF8860B0B";
+var cosignature = TransactionHelper.CosignatureDeserializer(cosignatureHex);
+tx.Cosignatures = new[] {cosignature};
 
-recreatedTx = sym.TransactionMapping.createFromPayload(signedPayload);
-
-cosignSignedTxs.forEach((cosignedTx) => {
-    signedPayload += cosignedTx.version.toHex() + cosignedTx.signerPublicKey + cosignedTx.signature;
-});
-
-size = `00000000${(signedPayload.length / 2).toString(16)}`;
-formatedSize = size.substr(size.length - 8, size.length);
-littleEndianSize = formatedSize.substr(6, 2) + formatedSize.substr(4, 2) + formatedSize.substr(2, 2) + formatedSize.substr(0, 2);
-
-signedPayload = littleEndianSize + signedPayload.substr(8, signedPayload.length - 8);
-signedTx = new sym.SignedTransaction(signedPayload, signedHash, alice.publicKey, recreatedTx.type, recreatedTx.networkType);
-
-await txRepo.announce(signedTx).toPromise();
-```
-
-後半部分の連署を追加する部分がPayload(サイズ値)を直接操作しているので少し難しいかもしれません。
-Aliceの秘密鍵で再度署名できる場合はcosignSignedTxsを生成した後、以下のように連署済みトランザクションを生成することも可能です。
-
-```js
-resignedTx = recreatedTx.signTransactionGivenSignatures(alice, cosignSignedTxs, generationHash);
-await txRepo.announce(resignedTx).toPromise();
+var payload = TransactionsFactory.CreatePayload(tx);
+var result = await Announce(payload);
+Console.WriteLine(result);
 ```
 
 ## 12.4 現場で使えるヒント

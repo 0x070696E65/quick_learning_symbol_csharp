@@ -4,63 +4,93 @@
 Valueの最大値は1024バイトです。
 本章ではモザイク・ネームスペースの作成アカウントとメタデータの作成アカウントがどちらもAliceであることを前提に説明します。
 
-本章のサンプルスクリプトを実行する前に以下を実行して必要ライブラリを読み込んでおいてください。
-```js
-metaRepo = repo.createMetadataRepository();
-mosaicRepo = repo.createMosaicRepository();
-metaService = new sym.MetadataTransactionService(metaRepo);
-```
 ## 7.1 アカウントに登録
 
 アカウントに対して、Key-Value値を登録します。
 
-```js
-key = sym.KeyGenerator.generateUInt64Key("key_account");
-value = "test";
+```cs
+var key = IdGenerator.GenerateUlongKey("key_account");
+var value = "test";
 
-tx = await metaService.createAccountMetadataTransaction(
-    undefined,
-    networkType,
-    alice.address, //メタデータ記録先アドレス
-    key,value, //Key-Value値
-    alice.address //メタデータ作成者アドレス
-).toPromise();
+var tx = new EmbeddedAccountMetadataTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    SignerPublicKey = alicePublicKey,
+    TargetAddress = new UnresolvedAddress(aliceAddress.bytes),
+    ScopedMetadataKey = key,
+    Value = Converter.Utf8ToBytes(value),
+    ValueSizeDelta = (byte) value.Length
+};
+var innerTransactions = new IBaseTransaction[] {tx};
+var merkleHash = SymbolFacade.HashEmbeddedTransactions(innerTransactions);
 
-aggregateTx = sym.AggregateTransaction.createComplete(
-  sym.Deadline.create(epochAdjustment),
-  [tx.toAggregate(alice.publicAccount)],
-  networkType,[]
-).setMaxFeeForAggregate(100, 0);
+var aggregateTx = new AggregateCompleteTransactionV2()
+{
+    Network = NetworkType.TESTNET,
+    SignerPublicKey = alicePublicKey,
+    Transactions = innerTransactions,
+    TransactionsHash = merkleHash,
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp)
+};
+TransactionHelper.SetMaxFee(aggregateTx, 100);
 
-signedTx = alice.sign(aggregateTx,generationHash);
-await txRepo.announce(signedTx).toPromise();
+var signature = facade.SignTransaction(aliceKeyPair, aggregateTx);
+var payload = TransactionsFactory.AttachSignature(aggregateTx, signature);
+var hash = facade.HashTransaction(aggregateTx, signature);
+Console.WriteLine(hash);
+var result = await Announce(payload);
+Console.WriteLine(result);
 ```
 
 メタデータの登録には記録先アカウントが承諾を示す署名が必要です。
 また、記録先アカウントと記録者アカウントが同一でもアグリゲートトランザクションにする必要があります。
 
-異なるアカウントのメタデータに登録する場合は署名時に
-signTransactionWithCosignatoriesを使用します。
+異なるアカウントのメタデータに登録する場合は連署者の署名が必要です。
+なお、手数料をfeeMultiplierにて設定する場合は連署者の数×104が追加の数量として必要です。
 
-```js
-tx = await metaService.createAccountMetadataTransaction(
-    undefined,
-    networkType,
-    bob.address, //メタデータ記録先アドレス
-    key,value, //Key-Value値
-    alice.address //メタデータ作成者アドレス
-).toPromise();
+```cs
+var key = IdGenerator.GenerateUlongKey("key_account");
+var value = "test";
 
-aggregateTx = sym.AggregateTransaction.createComplete(
-  sym.Deadline.create(epochAdjustment),
-  [tx.toAggregate(alice.publicAccount)],
-  networkType,[]
-).setMaxFeeForAggregate(100, 1); // 第二引数に連署者の数:1
+var tx = new EmbeddedAccountMetadataTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    SignerPublicKey = alicePublicKey,
+    TargetAddress = new UnresolvedAddress(bobAddress.bytes),
+    ScopedMetadataKey = key,
+    Value = Converter.Utf8ToBytes(value),
+    ValueSizeDelta = (byte) value.Length
+};
+var innerTransactions = new IBaseTransaction[] {tx};
+var merkleHash = SymbolFacade.HashEmbeddedTransactions(innerTransactions);
 
-signedTx = aggregateTx.signTransactionWithCosignatories(
-  alice,[bob],generationHash,// 第二引数に連署者
-);
-await txRepo.announce(signedTx).toPromise();
+var aggregateTx = new AggregateCompleteTransactionV2()
+{
+    Network = NetworkType.TESTNET,
+    SignerPublicKey = alicePublicKey,
+    Transactions = innerTransactions,
+    TransactionsHash = merkleHash,
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp)
+};
+TransactionHelper.SetMaxFee(aggregateTx, 100, 1/*連署者の数*/);
+
+// 署名
+var aliceSignature = facade.SignTransaction(aliceKeyPair, aggregateTx);
+TransactionsFactory.AttachSignature(aggregateTx, aliceSignature);
+
+var hash = facade.HashTransaction(aggregateTx);
+
+// 連署者による署名
+var bobCosignature = new Cosignature
+{
+    Signature = bobKeyPair.Sign(hash.bytes),
+    SignerPublicKey = bobKeyPair.PublicKey
+};
+aggregateTx.Cosignatures = new [] {bobCosignature};
+
+var payload = TransactionsFactory.CreatePayload(aggregateTx);
+var result = await Announce(payload);
+Console.WriteLine(result);
 ```
 
 bobの秘密鍵が分からない場合はこの後の章で説明する
@@ -71,30 +101,37 @@ bobの秘密鍵が分からない場合はこの後の章で説明する
 ターゲットとなるモザイクに対して、Key値・ソースアカウントの複合キーでValue値を登録します。
 登録・更新にはモザイクを作成したアカウントの署名が必要です。
 
-```js
-mosaicId = new sym.MosaicId("1275B0B7511D9161");
-mosaicInfo = await mosaicRepo.getMosaic(mosaicId).toPromise();
+```cs
+var key = IdGenerator.GenerateUlongKey("key_mosaic");
+var value = "test";
 
-key = sym.KeyGenerator.generateUInt64Key('key_mosaic');
-value = 'test';
+var tx = new EmbeddedMosaicMetadataTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    SignerPublicKey = alicePublicKey,
+    TargetAddress = new UnresolvedAddress(aliceAddress.bytes), //モザイク作成者アドレス
+    TargetMosaicId = new UnresolvedMosaicId(0x1F75D061E31413F7), // mosaic id
+    ScopedMetadataKey = key, // Key
+    Value = Converter.Utf8ToBytes(value), // Value
+    ValueSizeDelta = (byte) value.Length
+};
+var innerTransactions = new IBaseTransaction[] {tx};
+var merkleHash = SymbolFacade.HashEmbeddedTransactions(innerTransactions);
 
-tx = await metaService.createMosaicMetadataTransaction(
-  undefined,
-  networkType,
-  mosaicInfo.ownerAddress, //モザイク作成者アドレス
-  mosaicId,
-  key,value, //Key-Value値
-  alice.address
-).toPromise();
+var aggregateTx = new AggregateCompleteTransactionV2()
+{
+    Network = NetworkType.TESTNET,
+    SignerPublicKey = alicePublicKey,
+    Transactions = innerTransactions,
+    TransactionsHash = merkleHash,
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp)
+};
+TransactionHelper.SetMaxFee(aggregateTx, 100);
 
-aggregateTx = sym.AggregateTransaction.createComplete(
-    sym.Deadline.create(epochAdjustment),
-    [tx.toAggregate(alice.publicAccount)],
-    networkType,[]
-).setMaxFeeForAggregate(100, 0);
-
-signedTx = alice.sign(aggregateTx,generationHash);
-await txRepo.announce(signedTx).toPromise();
+var signature = facade.SignTransaction(aliceKeyPair, aggregateTx);
+var payload = TransactionsFactory.AttachSignature(aggregateTx, signature);
+var result = await Announce(payload);
+Console.WriteLine(result);
 ```
 
 ## 7.3 ネームスペースに登録
@@ -102,81 +139,85 @@ await txRepo.announce(signedTx).toPromise();
 ネームスペースに対して、Key-Value値を登録します。
 登録・更新にはネームスペースを作成したアカウントの署名が必要です。
 
-```js
-nsRepo = repo.createNamespaceRepository();
-namespaceId = new sym.NamespaceId("xembook");
-namespaceInfo = await nsRepo.getNamespace(namespaceId).toPromise();
+```cs
+var namespaceId = IdGenerator.GenerateNamespaceId("xembook");
+var key = IdGenerator.GenerateUlongKey("key_namespace");
+var value = "test";
 
-key = sym.KeyGenerator.generateUInt64Key('key_namespace');
-value = 'test';
+var tx = new EmbeddedNamespaceMetadataTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    SignerPublicKey = alicePublicKey, //メタデータの登録者
+    TargetAddress = new UnresolvedAddress(aliceAddress.bytes), //ネームスペースの作成者アドレス
+    TargetNamespaceId = new NamespaceId(namespaceId),
+    ScopedMetadataKey = key, //Key
+    Value = Converter.Utf8ToBytes(value), //Value
+    ValueSizeDelta = (byte) value.Length
+};
+var innerTransactions = new IBaseTransaction[] {tx};
+var merkleHash = SymbolFacade.HashEmbeddedTransactions(innerTransactions);
 
-tx = await metaService.createNamespaceMetadataTransaction(
-    undefined,networkType,
-    namespaceInfo.ownerAddress, //ネームスペースの作成者アドレス
-    namespaceId,
-    key,value, //Key-Value値
-    alice.address //メタデータの登録者
-).toPromise();
+var aggregateTx = new AggregateCompleteTransactionV2()
+{
+    Network = NetworkType.TESTNET,
+    SignerPublicKey = alicePublicKey,
+    Transactions = innerTransactions,
+    TransactionsHash = merkleHash,
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp)
+};
+TransactionHelper.SetMaxFee(aggregateTx, 100);
 
-aggregateTx = sym.AggregateTransaction.createComplete(
-    sym.Deadline.create(epochAdjustment),
-    [tx.toAggregate(alice.publicAccount)],
-    networkType,[]
-).setMaxFeeForAggregate(100, 0);
-
-signedTx = alice.sign(aggregateTx,generationHash);
-await txRepo.announce(signedTx).toPromise();
+var signature = facade.SignTransaction(aliceKeyPair, aggregateTx);
+var payload = TransactionsFactory.AttachSignature(aggregateTx, signature);
+var result = await Announce(payload);
+Console.WriteLine(result);
 ```
 
 ## 7.4 確認
-登録したメタデータを確認します。
+登録したメタデータを確認します。<br>
+https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Metadata-routes/operation/searchMetadataEntries
 
-```js
-res = await metaRepo.search({
-  targetAddress:alice.address,
-  sourceAddress:alice.address}
-).toPromise();
-console.log(res);
+```cs
+var param = $"/metadata?sourceAddress={aliceAddress}&targetAddress={aliceAddress}";
+var jsonString = await GetDataFromApi(node, param);
+var metadatas = JsonNode.Parse(jsonString);
+Console.WriteLine(metadatas);
 ```
 ###### 出力例
-```js
-data: Array(3)
-  0: Metadata
-    id: "62471DD2BF42F221DFD309D9"
-    metadataEntry: MetadataEntry
-      compositeHash: "617B0F9208753A1080F93C1CEE1A35ED740603CE7CFC21FBAE3859B7707A9063"
-      metadataType: 0
-      scopedMetadataKey: UInt64 {lower: 92350423, higher: 2540877595}
-      sourceAddress: Address {address: 'TBIL6D6RURP45YQRWV6Q7YVWIIPLQGLZQFHWFEQ', networkType: 152}
-      targetAddress: Address {address: 'TBIL6D6RURP45YQRWV6Q7YVWIIPLQGLZQFHWFEQ', networkType: 152}
-      targetId: undefined
-      value: "test"
-  1: Metadata
-    id: "62471F87BF42F221DFD30CC8"
-    metadataEntry: MetadataEntry
-      compositeHash: "D9E2019D7BD5BA58245320392A68B51752E35A35DA349B08E141DCE99AC3655A"
-      metadataType: 1
-      scopedMetadataKey: UInt64 {lower: 1789141730, higher: 3475078673}
-      sourceAddress: Address {address: 'TBIL6D6RURP45YQRWV6Q7YVWIIPLQGLZQFHWFEQ', networkType: 152}
-      targetAddress: Address {address: 'TBIL6D6RURP45YQRWV6Q7YVWIIPLQGLZQFHWFEQ', networkType: 152}
-      targetId: MosaicId
-      id: Id {lower: 1360892257, higher: 309702839}
-      value: "test"
-  3: Metadata
-    id: "62616372BF42F221DF00A88C"
-    metadataEntry: MetadataEntry
-      compositeHash: "D8E597C7B491BF7F9990367C1798B5C993E1D893222F6FC199F98915339D92D5"
-      metadataType: 2
-      scopedMetadataKey: UInt64 {lower: 141807833, higher: 2339015223}
-      sourceAddress: Address {address: 'TBIL6D6RURP45YQRWV6Q7YVWIIPLQGLZQFHWFEQ', networkType: 152}
-      targetAddress: Address {address: 'TBIL6D6RURP45YQRWV6Q7YVWIIPLQGLZQFHWFEQ', networkType: 152}
-      targetId: NamespaceId
-      id: Id {lower: 646738821, higher: 2754876907}
-      value: "test"
+```cs
+{
+  "data": [
+    {
+      "metadataEntry": {
+        "version": 1,
+        "compositeHash": "19EB6F74E30C1016A826938957F1746C794DB14DC7763DB2C74F30271DCC0F2B",
+        "sourceAddress": "982982FFFC666CB09288FCB4B8F820E8B0B5F77093075AEF",
+        "targetAddress": "982982FFFC666CB09288FCB4B8F820E8B0B5F77093075AEF",
+        "scopedMetadataKey": "DF16D14E750D0048",
+        "targetId": "0000000000000000",
+        "metadataType": 0,
+        "valueSize": 6,
+        "value": "616161616161"
+      },
+      "id": "636CF1F45ED31320FDD28430"
+    },
+    {
+      "metadataEntry": {
+        "version": 1,
+        "compositeHash": "9E8B1392C31D76F0E0108EFFC331ABFCC58C0DC116A8539361482C40301B98B3",
+        "sourceAddress": "982982FFFC666CB09288FCB4B8F820E8B0B5F77093075AEF",
+        "targetAddress": "982982FFFC666CB09288FCB4B8F820E8B0B5F77093075AEF",
+        "scopedMetadataKey": "E15492B77F0B0D44",
+        "targetId": "0000000000000000",
+        "metadataType": 0,
+        "valueSize": 6,
+        "value": "616161616161"
+      },
+      "id": "636CF1F45ED31320FDD28432"
+    },
 ```
 metadataTypeは以下の通りです。
-```js
-sym.MetadataType
+```cs
 {0: 'Account', 1: 'Mosaic', 2: 'Namespace'}
 ```
 

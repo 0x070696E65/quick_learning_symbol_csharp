@@ -10,19 +10,21 @@ Symbolブロックチェーンではネームスペースをレンタルして�
 
 ルートネームスペースを365日レンタルする場合の手数料を計算します。
 
-```js
-nwRepo = repo.createNetworkRepository();
+https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Network-routes/operation/getRentalFees
 
-rentalFees = await nwRepo.getRentalFees().toPromise();
-rootNsperBlock = rentalFees.effectiveRootNamespaceRentalFeePerBlock.compact();
-rentalDays = 365;
-rentalBlock = rentalDays * 24 * 60 * 60 / 30;
-rootNsRenatalFeeTotal = rentalBlock * rootNsperBlock;
-console.log("rentalBlock:" + rentalBlock);
-console.log("rootNsRenatalFeeTotal:" + rootNsRenatalFeeTotal);
+```cs
+const string param = $"/network/fees/rental";
+var jsonString = await GetDataFromApi(node, param);
+var rentalFees = JsonNode.Parse(jsonString);
+var rootNsperBlock = int.Parse((string)rentalFees["effectiveRootNamespaceRentalFeePerBlock"]);
+const int rentalDays = 365;
+const int rentalBlock = rentalDays * 24 * 60 * 60 / 30;
+var rootNsRentalFeeTotal = rentalBlock * rootNsperBlock;
+Console.WriteLine($"rentalBlock: {rentalBlock}");
+Console.WriteLine($"rootNsRentalFeeTotal: {rootNsRentalFeeTotal}");
 ```
 ###### 出力例
-```js
+```cs
 > rentalBlock:1051200
 > rootNsRenatalFeeTotal:210240000 //約210XYM
 ```
@@ -32,13 +34,13 @@ console.log("rootNsRenatalFeeTotal:" + rootNsRenatalFeeTotal);
 
 サブネームスペースの取得手数料を計算します。
 
-```js
-childNamespaceRentalFee = rentalFees.effectiveChildNamespaceRentalFee.compact()
-console.log(childNamespaceRentalFee);
+```cs
+var childNamespaceRentalFee = int.Parse((string)rentalFees["effectiveChildNamespaceRentalFee"]);
+Console.WriteLine($"childNamespaceRentalFee: {childNamespaceRentalFee}");
 ```
 ###### 出力例
-```js
-> 10000000 //10XYM
+```cs
+> childNamespaceRentalFee: 10000000 //10XYM
 ```
 
 サブネームスペースに期間指定はありません。ルートネームスペースをレンタルしている限り使用できます。
@@ -46,273 +48,429 @@ console.log(childNamespaceRentalFee);
 ## 6.2 レンタル
 
 ルートネームスペースをレンタルします(例:xembook)
-```js
+```cs
+var namespaceId = IdGenerator.GenerateNamespaceId("xembook");
+var tx = new NamespaceRegistrationTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    Id = new NamespaceId(namespaceId),
+    Name = Converter.Utf8ToBytes("xembook"),
+    RegistrationType = NamespaceRegistrationType.ROOT,
+    Duration = new BlockDuration(86400),
+    SignerPublicKey = alicePublicKey,
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp) //Deadline:有効期限
+};
+TransactionHelper.SetMaxFee(tx, 100);
 
-tx = sym.NamespaceRegistrationTransaction.createRootNamespace(
-    sym.Deadline.create(epochAdjustment),
-    "xembook",
-    sym.UInt64.fromUint(86400),
-    networkType
-).setMaxFee(100);
-signedTx = alice.sign(tx,generationHash);
-await txRepo.announce(signedTx).toPromise();
+var signature = facade.SignTransaction(aliceKeyPair, tx);
+var payload = TransactionsFactory.AttachSignature(tx, signature);
+var hash = facade.HashTransaction(tx, signature);
+Console.WriteLine(hash);
+var result = await Announce(payload);
+Console.WriteLine(result);
 ```
 
 サブネームスペースをレンタルします(例:xembook.tomato)
-```js
-subNamespaceTx = sym.NamespaceRegistrationTransaction.createSubNamespace(
-    sym.Deadline.create(epochAdjustment),
-    "tomato",  //作成するサブネームスペース
-    "xembook", //紐づけたいルートネームスペース
-    networkType,
-).setMaxFee(100);
-signedTx = alice.sign(subNamespaceTx,generationHash);
-await txRepo.announce(signedTx).toPromise();
+```cs
+var parentId = IdGenerator.GenerateNamespaceId("xembook");
+var namespaceId = IdGenerator.GenerateNamespaceId("tomato", parentId);
+var subNamespaceTx = new NamespaceRegistrationTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    ParentId = new NamespaceId(parentId),
+    Id = new NamespaceId(namespaceId),
+    Name = Converter.Utf8ToBytes("tomato"),
+    RegistrationType = NamespaceRegistrationType.CHILD,
+    Duration = new BlockDuration(86400),
+    SignerPublicKey = alicePublicKey,
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp) //Deadline:有効期限
+};
+TransactionHelper.SetMaxFee(subNamespaceTx, 100);
+
+var signature = facade.SignTransaction(aliceKeyPair, subNamespaceTx);
+var payload = TransactionsFactory.AttachSignature(subNamespaceTx, signature);
+var hash = facade.HashTransaction(subNamespaceTx, signature);
+Console.WriteLine(hash);
+var result = await Announce(payload);
+Console.WriteLine(result);
 ```
 
 2階層目のサブネームスペースを作成したい場合は
 例えば、xembook.tomato.morningを定義したい場合は以下のようにします。
 
-```js
-subNamespaceTx = sym.NamespaceRegistrationTransaction.createSubNamespace(
-    ,
-    "morning",  //作成するサブネームスペース
-    "xembook.tomato", //紐づけたいルートネームスペース
-    ,
-)
+```cs
+var parentId = IdGenerator.GenerateNamespaceId("xembook.tomato"); //紐づけたいルートネームスペース
+var namespaceId = IdGenerator.GenerateNamespaceId("morning", parentId); //作成するサブネームスペース
+var subNamespaceTx = new NamespaceRegistrationTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    ParentId = new NamespaceId(parentId),
+    Id = new NamespaceId(namespaceId),
+    Name = Converter.Utf8ToBytes("morning"),
+    RegistrationType = NamespaceRegistrationType.CHILD,
+    Duration = new BlockDuration(86400),
+    SignerPublicKey = alicePublicKey,
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp) //Deadline:有効期限
+};
 ```
-
 
 ### 有効期限の計算
 
 レンタル済みルートネームスペースの有効期限を計算します。
 
-```js
-nsRepo = repo.createNamespaceRepository();
-chainRepo = repo.createChainRepository();
-blockRepo = repo.createBlockRepository();
+namespace<br>
+https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Namespace-routes/operation/getNamespace
 
-namespaceId = new sym.NamespaceId("xembook");
-nsInfo = await nsRepo.getNamespace(namespaceId).toPromise();
-lastHeight = (await chainRepo.getChainInfo().toPromise()).height;
-lastBlock = await blockRepo.getBlockByHeight(lastHeight).toPromise();
-remainHeight = nsInfo.endHeight.compact() - lastHeight.compact();
+chain<br>
+https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Chain-routes/operation/getChainInfo
 
-endDate = new Date(lastBlock.timestamp.compact() + remainHeight * 30000 + epochAdjustment * 1000)
-console.log(endDate);
+block<br>
+https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Block-routes
+
+```cs
+var namespaceId = IdGenerator.GenerateNamespaceId("xembook");
+var namespaceParam = $"/namespaces/{namespaceId:X16}";
+var namespaceInfo = JsonNode.Parse(await GetDataFromApi(node, namespaceParam));
+var endHeight = ulong.Parse((string)namespaceInfo["namespace"]["endHeight"]);
+
+var chainParam = "/chain/info";
+var chainInfo = JsonNode.Parse(await GetDataFromApi(node, chainParam));
+var lastHeight = ulong.Parse((string)chainInfo["height"]);
+
+var blockParam = $"/blocks/{lastHeight}";
+var blockInfo = JsonNode.Parse(await GetDataFromApi(node, blockParam));
+var timestamp = ulong.Parse((string)blockInfo["block"]["timestamp"]);
+
+var remainHeight = endHeight - lastHeight;
+
+if (Network.TestNet.epocTime == null) throw new NullReferenceException("epocTime is null");
+var epochAdjustment = (ulong)new DateTimeOffset(Network.TestNet.epocTime.Value).ToUnixTimeSeconds();
+var endDateTimeOffset = DateTimeOffset.FromUnixTimeMilliseconds((long)(timestamp + remainHeight * 30000 + epochAdjustment * 1000));
+var endDate = endDateTimeOffset.DateTime;
+
+Console.WriteLine(endDate.ToString("yyyy/MM/dd HH:mm:ss", CultureInfo.InvariantCulture));
 ```
 
 ネームスペース情報の終了ブロックを取得し、現在のブロック高から差し引いた残ブロック数に30秒(平均ブロック生成間隔)を掛け合わせた日時を出力します。
 テストネットでは設定した有効期限よりも1日程度更新期限が猶予されます。メインネットはこの値が30日となっていますのでご留意ください
 
 ###### 出力例
-```js
-> Tue Mar 29 2022 18:17:06 GMT+0900 (日本標準時)
+```cs
+> 2023/05/12 13:33:43
 ```
 ## 6.3 リンク
 
 ### アカウントへのリンク
-```js
-namespaceId = new sym.NamespaceId("xembook");
-address = sym.Address.createFromRawAddress("TBIL6D6RURP45YQRWV6Q7YVWIIPLQGLZQFHWFEQ");
-tx = sym.AliasTransaction.createForAddress(
-    sym.Deadline.create(epochAdjustment),
-    sym.AliasAction.Link,
-    namespaceId,
-    address,
-    networkType
-).setMaxFee(100);
-signedTx = alice.sign(tx,generationHash);
-await txRepo.announce(signedTx).toPromise();
+```cs
+var namespaceId = IdGenerator.GenerateNamespaceId("xembook");
+var address = Converter.StringToAddress("TA5LGYEWS6L2WYBQ75J2DGK7IOZHYVWFWRLOFWI");
+var tx = new AddressAliasTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    NamespaceId = new NamespaceId(namespaceId),
+    Address = new Address(address),
+    AliasAction = AliasAction.LINK,
+    SignerPublicKey = alicePublicKey,
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp)
+};
+TransactionHelper.SetMaxFee(tx, 100);
+
+var signature = facade.SignTransaction(aliceKeyPair, tx);
+var payload = TransactionsFactory.AttachSignature(tx, signature);
+var hash = facade.HashTransaction(tx, signature);
+Console.WriteLine(hash);
+var result = await Announce(payload);
+Console.WriteLine(result);
 ```
 リンク先のアドレスは自分が所有していなくても問題ありません。
+※但し既にネットワークに認識されているアドレスに限ります。
 
 ### モザイクへリンク
-```js
-namespaceId = new sym.NamespaceId("xembook.tomato");
-mosaicId = new sym.MosaicId("3A8416DB2D53xxxx");
-tx = sym.AliasTransaction.createForMosaic(
-    sym.Deadline.create(epochAdjustment),
-    sym.AliasAction.Link,
-    namespaceId,
-    mosaicId,
-    networkType
-).setMaxFee(100);
-signedTx = alice.sign(tx,generationHash);
-await txRepo.announce(signedTx).toPromise();
-```
+```cs
+var namespaceId = IdGenerator.GenerateNamespaceId("xembook.tomato");
 
+var tx = new MosaicAliasTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    NamespaceId = new NamespaceId(namespaceId),
+    MosaicId = new MosaicId(0x5E033AC6CE11E654),
+    AliasAction = AliasAction.LINK,
+    SignerPublicKey = alicePublicKey,
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp)
+};
+TransactionHelper.SetMaxFee(tx, 100);
+
+var signature = facade.SignTransaction(aliceKeyPair, tx);
+var payload = TransactionsFactory.AttachSignature(tx, signature);
+var hash = facade.HashTransaction(tx, signature);
+Console.WriteLine(hash);
+var result = await Announce(payload);
+Console.WriteLine(result);
+```
 モザイクを作成したアドレスと同一の場合のみリンクできるようです。
 
+※この時、MosaicIdの引数はulong型になります。
+そのため`Convert.ToUInt64("5E033AC6CE11E654", 16);`のように16進数文字列をulong型にコンバートするか`0x5E033AC6CE11E654`のように指定してください。
 
 ## 6.4 未解決で使用
 
 送信先にUnresolvedAccountとして指定して、アドレスを特定しないままトランザクションを署名・アナウンスします。
 チェーン側で解決されたアカウントに対しての送信が実施されます。
-```js
-namespaceId = new sym.NamespaceId("xembook");
-tx = sym.TransferTransaction.create(
-    sym.Deadline.create(epochAdjustment),
-    namespaceId, //UnresolvedAccount:未解決アカウントアドレス
-    [],
-    sym.EmptyMessage,
-    networkType
-).setMaxFee(100);
-signedTx = alice.sign(tx,generationHash);
-await txRepo.announce(signedTx).toPromise();
+```cs
+var namespaceId = IdGenerator.GenerateNamespaceId("xembook");
+var tx = new TransferTransactionV1
+{
+    Network = NetworkType.TESTNET,
+    RecipientAddress = new UnresolvedAddress(Converter.AliasToRecipient(namespaceId, Network.TestNet.Identifier)), //UnresolvedAccount:未解決アカウントアドレス
+    SignerPublicKey = alicePublicKey,
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp)
+};
+TransactionHelper.SetMaxFee(tx, 100);
 ```
 送信モザイクにUnresolvedMosaicとして指定して、モザイクIDを特定しないままトランザクションを署名・アナウンスします。
 
-```js
-namespaceId = new sym.NamespaceId("xembook.tomato");
-tx = sym.TransferTransaction.create(
-    sym.Deadline.create(epochAdjustment),
-    address, 
-    [
-        new sym.Mosaic(
-          namespaceId,//UnresolvedMosaic:未解決モザイク
-          sym.UInt64.fromUint(1) //送信量
-        )
-    ],
-    sym.EmptyMessage,
-    networkType
-).setMaxFee(100);
-signedTx = alice.sign(tx,generationHash);
-await txRepo.announce(signedTx).toPromise();
+```cs
+var namespaceId = IdGenerator.GenerateNamespaceId("xembook.tomato");
+var tx = new TransferTransactionV1
+{
+    Network = NetworkType.TESTNET,
+    RecipientAddress = new UnresolvedAddress(bobAddress.bytes),
+    SignerPublicKey = alicePublicKey,
+    Mosaics = new []
+    {
+        new UnresolvedMosaic()
+        {
+            MosaicId = new UnresolvedMosaicId(namespaceId), //UnresolvedMosaic:未解決モザイク
+            Amount = new Amount(1) //送信量
+        }
+    },
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp)
+};
+TransactionHelper.SetMaxFee(tx, 100);
 ```
 
 XYMをネームスペースで使用する場合は以下のように指定します。
 
-```js
-namespaceId = new sym.NamespaceId("symbol.xym");
-```
-```js
-> NamespaceId {fullName: 'symbol.xym', id: Id}
-    fullName: "symbol.xym"
-    id: Id {lower: 1106554862, higher: 3880491450}
+```cs
+var namespaceId = IdGenerator.GenerateNamespaceId("symbol.xym");
 ```
 
-Idは内部ではUint64と呼ばれる数値 `{lower: 1106554862, higher: 3880491450}` で保持されています。
+namespaceIdはulongですが、以下のように16進数文字列に変換することも可能です
+```cs
+namespaceId.ToString("X8")
+```
 
 ## 6.5 参照
 
 アドレスへリンクしたネームスペースの参照します
-```js
-nsRepo = repo.createNamespaceRepository();
-
-namespaceInfo = await nsRepo.getNamespace(new sym.NamespaceId("xembook")).toPromise();
-console.log(namespaceInfo);
+```cs
+var namespaceId = IdGenerator.GenerateNamespaceId("xembook");
+var param = $"/namespaces/{namespaceId:X8}";
+var jsonString = await GetDataFromApi(node, param);
+Console.WriteLine(jsonString);
+var namespaceInfo = JsonNode.Parse(jsonString);
+Console.WriteLine($"NamespaceInfo: {namespaceInfo}");
 ```
 ###### 出力例
-```js
-NamespaceInfo
-    active: true
-  > alias: AddressAlias
-        address: Address {address: 'TBIL6D6RURP45YQRWV6Q7YVWIIPLQGLZQFHWFEQ', networkType: 152}
-        mosaicId: undefined
-        type: 2 //AliasType
-    depth: 1
-    endHeight: UInt64 {lower: 500545, higher: 0}
-    index: 1
-    levels: [NamespaceId]
-    ownerAddress: Address {address: 'TBIL6D6RURP45YQRWV6Q7YVWIIPLQGLZQFHWFEQ', networkType: 152}
-    parentId: NamespaceId {id: Id}
-    registrationType: 0 //NamespaceRegistrationType
-    startHeight: UInt64 {lower: 324865, higher: 0}
+```cs
+> NamespaceInfo: {
+  "meta": {
+    "index": 0,
+    "active": true
+  },
+  "namespace": {
+    "version": 1,
+    "registrationType": 0,
+    "depth": 1,
+    "level0": "DE3D3C9CD38EBCFF",
+    "alias": {
+      "type": 2,
+      "address": "983AB360969797AB6030FF53A1995F43B27C56C5B456E2D9"
+    },
+    "parentId": "0000000000000000",
+    "ownerAddress": "982982FFFC666CB09288FCB4B8F820E8B0B5F77093075AEF",
+    "startHeight": "371665",
+    "endHeight": "460945"
+  },
+  "id": "64364422D7D26E76F92946C9"
+}
 ```
 
-AliasTypeは以下の通りです。
-```js
+aliasは以下の通りです。
+```cs
 {0: 'None', 1: 'Mosaic', 2: 'Address'}
 ```
 
-NamespaceRegistrationTypeは以下の通りです。
-```js
+registrationTypeは以下の通りです。
+```cs
 {0: 'RootNamespace', 1: 'SubNamespace'}
 ```
 
 モザイクへリンクしたネームスペースを参照します。
-```js
-nsRepo = repo.createNamespaceRepository();
-
-namespaceInfo = await nsRepo.getNamespace(new sym.NamespaceId("xembook.tomato")).toPromise();
-console.log(namespaceInfo);
+```cs
+var namespaceId = IdGenerator.GenerateNamespaceId("xembook.tomato");
+var param = $"/namespaces/{namespaceId:X8}";
+var jsonString = await GetDataFromApi(node, param);
+var namespaceInfo = JsonNode.Parse(jsonString);
+Console.WriteLine($"NamespaceInfo: {namespaceInfo}");
 ```
 ###### 出力例
-```js
-NamespaceInfo
-  > active: true
-    alias: MosaicAlias
-        address: undefined
-        mosaicId: MosaicId
-        id: Id {lower: 1360892257, higher: 309702839}
-        type: 1 //AliasType
-    depth: 2
-    endHeight: UInt64 {lower: 500545, higher: 0}
-    index: 1
-    levels: (2) [NamespaceId, NamespaceId]
-    ownerAddress: Address {address: 'TBIL6D6RURP45YQRWV6Q7YVWIIPLQGLZQFHWFEQ', networkType: 152}
-    parentId: NamespaceId {id: Id}
-    registrationType: 1 //NamespaceRegistrationType
-    startHeight: UInt64 {lower: 324865, higher: 0}
+```cs
+NamespaceInfo: {
+  "meta": {
+    "index": 0,
+    "active": true
+  },
+  "namespace": {
+    "version": 1,
+    "registrationType": 1,
+    "depth": 2,
+    "level0": "DE3D3C9CD38EBCFF",
+    "level1": "F2C38795AB40A6A0",
+    "alias": {
+      "type": 1,
+      "mosaicId": "5E033AC6CE11E654"
+    },
+    "parentId": "DE3D3C9CD38EBCFF",
+    "ownerAddress": "982982FFFC666CB09288FCB4B8F820E8B0B5F77093075AEF",
+    "startHeight": "371665",
+    "endHeight": "460945"
+  },
+  "id": "64364422D7D26E76F92946CB"
+}
+
 ```
 
 ### 逆引き
 
-アドレスに紐づけられたネームスペースを全て調べます。
-```js
-nsRepo = repo.createNamespaceRepository();
+アドレスに紐づけられたネームスペースを全て調べます。<br>
+https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Namespace-routes/operation/getAccountsNames
 
-accountNames = await nsRepo.getAccountsNames(
-  [sym.Address.createFromRawAddress("TBIL6D6RURP45YQRWV6Q7YVWIIPLQGLZQFHWFEQ")]
-).toPromise();
+```cs
+var param = $"/namespaces/account/names";
+var obj = new Dictionary<string, string[]>()
+{
+    {
+        "addresses", new[]
+        {
+            "TA5LGYEWS6L2WYBQ75J2DGK7IOZHYVWFWRLOFWI"
+        }
+    }
+};
 
-namespaceIds = accountNames[0].names.map(name=>{
-  return name.namespaceId;
-});
-console.log(namespaceIds);
+var jsonString = await PostDataFromApi(node, param, obj);
+var namespaceInfo = JsonNode.Parse(jsonString);
+foreach (var name in (IEnumerable)namespaceInfo["accountNames"][0]["names"])
+{
+    Console.WriteLine(name);
+}
 ```
 
-モザイクに紐づけられたネームスペースを全て調べます。
-```js
-nsRepo = repo.createNamespaceRepository();
+モザイクに紐づけられたネームスペースを全て調べます。<br>
+https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Namespace-routes/operation/getMosaicsNames
+```cs
+var param = $"/namespaces/mosaic/names";
+var obj = new Dictionary<string, string[]>()
+{
+    {
+        "mosaicIds", new[]
+        {
+            "72C0212E67A08BCE"
+        }
+    }
+};
 
-mosaicNames = await nsRepo.getMosaicsNames(
-  [new sym.MosaicId("72C0212E67A08BCE")]
-).toPromise();
-
-namespaceIds = mosaicNames[0].names.map(name=>{
-  return name.namespaceId;
-});
-console.log(namespaceIds);
+var jsonString = await PostDataFromApi(node, param, obj);
+var namespaceInfo = JsonNode.Parse(jsonString);
+foreach (var name in (IEnumerable)namespaceInfo["mosaicNames"][0]["names"])
+{
+    Console.WriteLine(name);
+}
 ```
 
 
 ### レシートの参照
 
-トランザクションに使用されたネームスペースをブロックチェーン側がどう解決したかを確認します。
+トランザクションに使用されたネームスペースをブロックチェーン側がどう解決したかを確認します。<br>
 
-```js
-receiptRepo = repo.createReceiptRepository();
-state = await receiptRepo.searchAddressResolutionStatements({height:179401}).toPromise();
+#### アドレス
+https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Receipt-routes/operation/searchAddressResolutionStatements
+
+```cs
+var param = $"/statements/resolutions/address?height=373690";
+var jsonString = await GetDataFromApi(node, param);
+var state = JsonNode.Parse(jsonString);
+Console.WriteLine(state);
 ```
 ###### 出力例
 ```js
-data: Array(1)
-  0: ResolutionStatement
-    height: UInt64 {lower: 179401, higher: 0}
-    resolutionEntries: Array(1)
-      0: ResolutionEntry
-        resolved: Address {address: 'TBIL6D6RURP45YQRWV6Q7YVWIIPLQGLZQFHWFEQ', networkType: 152}
-        source: ReceiptSource {primaryId: 1, secondaryId: 0}
-    resolutionType: 0 //ResolutionType
-    unresolved: NamespaceId
-      id: Id {lower: 646738821, higher: 2754876907}
+{
+  "data": [
+    {
+      "statement": {
+        "height": "373690",
+        "unresolved": "99FFBC8ED39C3C3DDE000000000000000000000000000000",
+        "resolutionEntries": [
+          {
+            "source": {
+              "primaryId": 1,
+              "secondaryId": 0
+            },
+            "resolved": "983AB360969797AB6030FF53A1995F43B27C56C5B456E2D9"
+          }
+        ]
+      },
+      "id": "64365D88D7D26E76F92948B5",
+      "meta": {
+        "timestamp": "14034020645"
+      }
+    }
+  ],
+  "pagination": {
+    "pageNumber": 1,
+    "pageSize": 20
+  }
+}
 ```
 
-ResolutionTypeは以下の通りです。
+#### モザイク
+https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Receipt-routes/operation/searchMosaicResolutionStatements
+
+```cs
+var param = $"/statements/resolutions/mosaic?height=373694";
+var jsonString = await GetDataFromApi(node, param);
+var state = JsonNode.Parse(jsonString);
+Console.WriteLine(state);
+```
+###### 出力例
 ```js
-{0: 'Address', 1: 'Mosaic'}
+{
+  "data": [
+    {
+      "statement": {
+        "height": "373694",
+        "unresolved": "F2C38795AB40A6A0",
+        "resolutionEntries": [
+          {
+            "source": {
+              "primaryId": 1,
+              "secondaryId": 0
+            },
+            "resolved": "5E033AC6CE11E654"
+          }
+        ]
+      },
+      "id": "64365E1ED7D26E76F92948C1",
+      "meta": {
+        "timestamp": "14034170941"
+      }
+    }
+  ],
+  "pagination": {
+    "pageNumber": 1,
+    "pageSize": 20
+  }
+}
 ```
 
 #### 注意事項

@@ -3,107 +3,240 @@ SymbolのノードはWebSocket通信でブロックチェーンの状態変化�
 
 ## 10.1 リスナー設定
 
-WebSocketを生成してリスナーの設定を行います。
+WebSocketを生成してリスナーの設定を行います。本書では以下のクラスを用意しました。C#のSDKにはwebsocketについては実装されていません。理由は使用するWebSocketライブラリ等が環境や作成するアプリケーションによって変更されると想定するからです。
 
-```js
-nsRepo = repo.createNamespaceRepository();
-wsEndpoint = NODE.replace('http', 'ws') + "/ws";
-listener = new sym.Listener(wsEndpoint,nsRepo,WebSocket);
-listener.open();
+以下のクラスはC#コンソールアプリで使用することを想定しています。Unityや他のアプリケーションなどは各自環境に合わせて実装してください。本書にてWebsocketについて詳しくは説明しません。<br>
+https://docs.symbol.dev/ja/api.html#websockets
+
+```cs
+class Listener
+{
+    private readonly string uri;
+    private readonly ClientWebSocket webSocket;
+    private string uid;
+    
+    public Listener(string _uri, ClientWebSocket _webSocket)
+    {
+        uri = _uri;
+        webSocket = _webSocket;
+        uid = "";
+    }
+
+    public async Task Open()
+    {
+        var serverUri = new Uri(uri);
+        await webSocket.ConnectAsync(serverUri, CancellationToken.None);
+        Console.WriteLine("Connected to Symbol node WebSocket server.");
+
+        var buffer = new byte[256];
+        var receiveResult = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+        var receivedMessage = Encoding.UTF8.GetString(buffer, 0, receiveResult.Count);
+        var json = JsonNode.Parse(receivedMessage);
+        uid = (string)json["uid"];
+    }
+    
+    public async Task<bool> NewBlock(Action<JsonNode> callback = null)
+    {
+        var body = Encoding.UTF8.GetBytes("{\"uid\":\"" + uid + "\", \"subscribe\":\"block\"}");
+        await webSocket.SendAsync(new ArraySegment<byte>(body), WebSocketMessageType.Text, true, CancellationToken.None);
+        while (webSocket.State == WebSocketState.Open)
+        {
+            var buffer = new byte[4096];
+            var receiveResult = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+            var receivedMessage = Encoding.UTF8.GetString(buffer, 0, receiveResult.Count);
+            var json = JsonNode.Parse(receivedMessage);
+            if ((string) json["topic"] == "block")
+                callback?.Invoke(json["data"]);
+        }
+        return true;
+    }
+    
+    public async Task Confirmed(string address, Action<JsonNode> callback = null)
+    {
+        var body = Encoding.UTF8.GetBytes("{\"uid\":\"" + uid + "\", \"subscribe\":\"confirmedAdded/" + address + "\"}");
+        await webSocket.SendAsync(new ArraySegment<byte>(body), WebSocketMessageType.Text, true, CancellationToken.None);
+        while (webSocket.State == WebSocketState.Open)
+        {
+            var buffer = new byte[4096];
+            var receiveResult = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+            var receivedMessage = Encoding.UTF8.GetString(buffer, 0, receiveResult.Count);
+            var json = JsonNode.Parse(receivedMessage);
+            if((string)json["topic"] == "confirmedAdded/" + address)
+                callback?.Invoke(json["data"]);
+        }
+    }
+    
+    public async Task Unconfirmed(string address, Action<JsonNode> callback = null)
+    {
+        var body = Encoding.UTF8.GetBytes("{\"uid\":\"" + uid + "\", \"subscribe\":\"unconfirmedAdded/" + address + "\"}");
+        await webSocket.SendAsync(new ArraySegment<byte>(body), WebSocketMessageType.Text, true, CancellationToken.None);
+        while (webSocket.State == WebSocketState.Open)
+        {
+            var buffer = new byte[4096];
+            var receiveResult = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+            var receivedMessage = Encoding.UTF8.GetString(buffer, 0, receiveResult.Count);
+            var json = JsonNode.Parse(receivedMessage);
+            if((string)json["topic"] == "unconfirmedAdded/" + address)
+                callback?.Invoke(json["data"]);
+        }
+    }
+    
+    public async Task AggregateBondedAdded(string address, Action<JsonNode> callback = null)
+    {
+        var body = Encoding.UTF8.GetBytes("{\"uid\":\"" + uid + "\", \"subscribe\":\"partialAdded/" + address + "\"}");
+        await webSocket.SendAsync(new ArraySegment<byte>(body), WebSocketMessageType.Text, true, CancellationToken.None);
+        while (webSocket.State == WebSocketState.Open)
+        {
+            var buffer = new byte[4096];
+            var receiveResult = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+            var receivedMessage = Encoding.UTF8.GetString(buffer, 0, receiveResult.Count);
+            var json = JsonNode.Parse(receivedMessage);
+            if((string)json["topic"] == "partialAdded/" + address)
+                callback?.Invoke(json["data"]);
+        }
+    }
+    
+    public void Close(string reason = "Closing")
+    {
+        webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, reason, CancellationToken.None);
+        webSocket.Dispose();
+    }
+}
 ```
 
 エンドポイントのフォーマットは以下の通りです。
 - wss://{node url}:3001/ws
 
-何も通信が無ければ、listenerは1分で切断されます。
-
 ## 10.2 受信検知
 
-アカウントが受信したトランザクションを検知します。
+アカウントが受信した未承認トランザクションを検知します。
 
-```js
-listener.open().then(() => {
-
-    //承認トランザクションの検知
-    listener.confirmed(alice.address)
-    .subscribe(tx=>{
-        //受信後の処理を記述
-        console.log(tx);
-    });
-
-    //未承認トランザクションの検知
-    listener.unconfirmedAdded(alice.address)
-    .subscribe(tx=>{
-        //受信後の処理を記述
-        console.log(tx);
-    });
+```cs
+var listener = new Listener("wss://mikun-testnet.tk:3001/ws", new ClientWebSocket());
+await listener.Open();
+//未承認トランザクションの検知
+await listener.Unconfirmed(aliceAddress.ToString(), (unconfirmedTx) =>
+{
+    //受信後の処理を記述
+    Console.WriteLine($"UnconfirmedTx: {unconfirmedTx}");
 });
 ```
 上記リスナーを実行後、aliceへの送信トランザクションをアナウンスしてください。
 
 ###### 出力例
-```js
-> Promise {<pending>}
-> TransferTransaction {type: 16724, networkType: 152, version: 1, deadline: Deadline, maxFee: UInt64, …}
-    deadline: Deadline {adjustedValue: 12449258375}
-    maxFee: UInt64 {lower: 32000, higher: 0}
-    message: RawMessage {type: -1, payload: ''}
-    mosaics: []
-    networkType: 152
-    payloadSize: undefined
-    recipientAddress: Address {address: 'TBXUTAX6O6EUVPB6X7OBNX6UUXBMPPAFX7KE5TQ', networkType: 152}
-    signature: "914B625F3013635FA9C99B2F138C47CD75F6E1DF7BDDA291E449390178EB461AA389522FA126D506405163CC8BA51FA9019E0522E3FA9FED7C2F857F11FBCC09"
-    signer: PublicAccount {publicKey: 'D4933FC1E4C56F9DF9314E9E0533173E1AB727BDB2A04B59F048124E93BEFBD2', address: Address}
-    transactionInfo: TransactionInfo
-        hash: "3B21D8842EB70A780A662CCA19B8B030E2D5C7FB4C54BDA8B3C3760F0B35FECE"
-        height: UInt64 {lower: 316771, higher: 0}
-        id: undefined
-        index: undefined
-        merkleComponentHash: "3B21D8842EB70A780A662CCA19B8B030E2D5C7FB4C54BDA8B3C3760F0B35FECE"
-    type: 16724
-    version: 1
+```cs
+UnconfirmedTx: {
+  "transaction": {
+    "signature": "3CAC524FB79138955221934C57847F1565EC8364D6CA0FF31519EF57C6DD0C81A30C6420F2AA9E2A80B829CF5B95CC96DEA57D0F14D1EBE5F15983147E784E0F",
+    "signerPublicKey": "13B00FBB13C7644E13BD786F0EA4F97820022A2606759793A5D3525A03F92A2F",
+    "version": 1,
+    "network": 152,
+    "type": 16724,
+    "maxFee": "19360",
+    "deadline": "14223106946",
+    "recipientAddress": "982982FFFC666CB09288FCB4B8F820E8B0B5F77093075AEF",
+    "mosaics": [
+      {
+        "id": "72C0212E67A08BCE",
+        "amount": "1000000"
+      }
+    ]
+  },
+  "meta": {
+    "hash": "2FC13AA2E0FC5E8D48AE494F2058F0FA64AE7A6DE5FF6CE772947B7C39E06A95",
+    "merkleComponentHash": "2FC13AA2E0FC5E8D48AE494F2058F0FA64AE7A6DE5FF6CE772947B7C39E06A95",
+    "height": "0"
+  }
+}
 ```
 
-未承認トランザクションは transactionInfo.height=0　で受信します。
+未承認トランザクションは meta.height=0　で受信します。
+
+アカウントが受信した承認トランザクションを検知します。
+
+```cs
+var listener = new Listener("wss://mikun-testnet.tk:3001/ws", new ClientWebSocket());
+await listener.Open();
+//未承認トランザクションの検知
+await listener.Confirmed(aliceAddress.ToString(), (confirmedTx) =>
+{
+    //受信後の処理を記述
+    Console.WriteLine($"ConfirmedTx: {confirmedTx}");
+});
+```
+上記リスナーを実行後、aliceへの送信トランザクションをアナウンスしてください。
+
+###### 出力例
+```cs
+> ConfirmedTx: {
+  "transaction": {
+    "signature": "1C50D39E92639C2957818225F4895E86B8181A157D435763B1C79EEE770E5EB6B9D04E57CE845B2A0AC7A0E19C7B4CBC6D08DCB363E8CCF76223BDD420B6620F",
+    "signerPublicKey": "13B00FBB13C7644E13BD786F0EA4F97820022A2606759793A5D3525A03F92A2F",
+    "version": 1,
+    "network": 152,
+    "type": 16724,
+    "maxFee": "19888",
+    "deadline": "14220836102",
+    "recipientAddress": "983AB360969797AB6030FF53A1995F43B27C56C5B456E2D9",
+    "mosaics": [
+      {
+        "id": "72C0212E67A08BCE",
+        "amount": "1000000"
+      }
+    ]
+  },
+  "meta": {
+    "hash": "63A6E0A10758B10DA4B396E2C038D8190B33EE4E5F14488667F6808C52889059",
+    "merkleComponentHash": "63A6E0A10758B10DA4B396E2C038D8190B33EE4E5F14488667F6808C52889059",
+    "height": "379346"
+  }
+}
+```
+
+受信後の処理内等で`listener.Close();`とすることで監視を終えることができます。
 
 ## 10.3 ブロック監視
 
 新規に生成されたブロックを検知します。
 
 ```js
-listener.open().then(() => {
-
-    //ブロック生成の検知
-    listener.newBlock()
-    .subscribe(block=>console.log(block));
+var listener = new Listener("wss://mikun-testnet.tk:3001/ws", new ClientWebSocket());
+await listener.Open();
+await listener.NewBlock((x)=>
+{
+    Console.WriteLine("New block: " + x);
 });
 ```
 ###### 出力例
-```js
-> Promise {<pending>}
-> NewBlock
-    beneficiaryAddress: Address {address: 'TAKATV2VSYBH3RX4JVCCILITWANT6JRANZI2AUQ', networkType: 152}
-    blockReceiptsHash: "ABDDB66A03A270E4815C256A8125B70FC3B7EFC4B95FF5ECAD517CB1AB5F5334"
-    blockTransactionsHash: "0000000000000000000000000000000000000000000000000000000000000000"
-    difficulty: UInt64 {lower: 1316134912, higher: 2328}
-    feeMultiplier: 0
-    generationHash: "5B4F32D3F2CDD17917D530A6A967927D93F73F2B52CC590A64E3E94408D8CE96"
-    hash: "E8294BDDDAE32E17242DF655805EC0FCAB3B628A331824B87A3CA7578683B09C"
-    height: UInt64 {lower: 316759, higher: 0}
-    networkType: 152
-    previousBlockHash: "38382D616772682321D58046511DD942F36A463155C5B7FB0A2CBEE8E29B253C"
-    proofGamma: "37187F1C8BD8C87CB4F000F353ACE5717D988BC220EFBCC25E2F40B1FB9B7D7A"
-    proofScalar: "AD91A572E5D81EA92FE313CA00915E5A497F60315C63023A52E292E55345F705"
-    proofVerificationHash: "EF58228B3EB3C422289626935DADEF11"
-    signature: "A9481E5976EDA86B74433E8BCC8495788BA2B9BE0A50F9435AD90A14D1E362D934BA26069182C373783F835E55D7F3681817716295EC1EFB5F2375B6DE302801"
-    signer: PublicAccount {publicKey: 'F2195B3FAFBA3DF8C31CFBD9D5BE95BB3F3A04BDB877C59EFB9D1C54ED2DC50E', address: Address}
-    stateHash: "4A1C828B34DE47759C2D717845830BA14287A4EC7220B75494BDC31E9539FCB5"
-    timestamp: UInt64 {lower: 3851456497, higher: 2}
-    type: 33091
-    version: 1
+```cs
+> New block: {
+  "block": {
+    "signature": "E638C8E8D1A842AA8A35F5C79733787407EBAB7033CB068923FFCFC597F050927B19DC895B66BC1082ACE1BCC0E0E7B315A6DDCF6FCB204E35FE888E65316F0B",
+    "signerPublicKey": "104CCEA2A65EA60F84A45704084EF93BAD423932085000A13B4E9279788933FF",
+    "version": 1,
+    "network": 152,
+    "type": 33091,
+    "height": "379421",
+    "timestamp": "14216082496",
+    "difficulty": "10000000000000",
+    "proofGamma": "C06AEE0E1A34D53AEF7CDC6A40EC3A8E6778F3F33C5CFF63FC0C0EF6394C5809",
+    "proofVerificationHash": "5B564280F3EE6A28029D04DDD96C63E0",
+    "proofScalar": "978E5AA7246642929C6F2870B802F0D4A0B5D0E26BE59161EB71EA3B95D8D803",
+    "previousBlockHash": "8BB43BE0477BBF010D99D2AB622B9C1EE4B5A02B0EB8FC53C471E5D46D00C7E1",
+    "transactionsHash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "receiptsHash": "0F2332B8351B6C51B350C8F14D05C77D0D6B26D72D13B595772F5913A6A80D6C",
+    "stateHash": "0ADDFF5514CC4CF229FFDED9764E190910D3EC302FD058C67BF7D4767C22E2F2",
+    "beneficiaryAddress": "98A4B6731C0BC7E2778B0A0F1878F8EDF24E933EEEF6D153",
+    "feeMultiplier": 0
+  },
+  "meta": {
+    "hash": "719C06EE6ED9E796FC05D84164EBDF3EE60DA16B83C50581C2644C749C8FB4B3",
+    "generationHash": "C308B1A5B00EEB24890FD8478B18D8AF46DAE13C7A9FE479744B4230A97CAD8E"
+  }
+}
 ```
 
-listener.newBlock()をしておくと、約30秒ごとに通信が発生するのでWebSocketの切断が起こりにくくなります。  
+listener.NewBlock()をしておくと、約30秒ごとに通信が発生するのでWebSocketの切断が起こりにくくなります。  
 まれに、ブロック生成が1分を超える場合があるのでその場合はリスナーを再接続する必要があります。
 （その他の事象で切断される可能性もあるので、万全を期したい場合は後述するoncloseで補足しましょう）
 
@@ -111,219 +244,192 @@ listener.newBlock()をしておくと、約30秒ごとに通信が発生する�
 
 署名が必要なトランザクションが発生すると検知します。
 
-```js
-listener.open().then(() => {
-    //署名が必要なアグリゲートボンデッドトランザクション発生の検知
-    listener.aggregateBondedAdded(alice.address)
-    .subscribe(async tx=>console.log(tx));
+```cs
+await listener.Open();
+await listener.AggregateBondedAdded(bobAddress.ToString(),(x)=>
+{
+    Console.WriteLine("AggregateTransaction: " + x);
 });
 ```
 ###### 出力例
-```js
+```cs
 
-> AggregateTransaction
-    cosignatures: []
-    deadline: Deadline {adjustedValue: 12450154608}
-  > innerTransactions: Array(2)
-        0: TransferTransaction {type: 16724, networkType: 152, version: 1, deadline: Deadline, maxFee: UInt64, …}
-        1: TransferTransaction {type: 16724, networkType: 152, version: 1, deadline: Deadline, maxFee: UInt64, …}
-    maxFee: UInt64 {lower: 94400, higher: 0}
-    networkType: 152
-    signature: "972968C5A2FB70C1D644BE206A190C4FCFDA98976F371DBB70D66A3AAEBCFC4B26E7833BCB86C407879C07927F6882C752C7012C265C2357CAA52C29834EFD0F"
-    signer: PublicAccount {publicKey: '0E5C72B0D5946C1EFEE7E5317C5985F106B739BB0BC07E4F9A288417B3CD6D26', address: Address}
-  > transactionInfo: TransactionInfo
-        hash: "44B2CD891DA0B788F1DD5D5AB24866A9A172C80C1749DCB6EB62255A2497EA08"
-        height: UInt64 {lower: 0, higher: 0}
-        id: undefined
-        index: undefined
-        merkleComponentHash: "0000000000000000000000000000000000000000000000000000000000000000"
-    type: 16961
-    version: 1
-
+> AggregateTransaction: {
+  "transaction": {
+    "signature": "3A64753DCAA8FEC8254D9BDD1C82B36BDA78225EB8F54BE777FB91A8E4908A0B965C7D1225CB1A79D0252F1DAFFE190453CFA20EFEF422DDD3ACC539F37D8002",
+    "signerPublicKey": "13B00FBB13C7644E13BD786F0EA4F97820022A2606759793A5D3525A03F92A2F",
+    "version": 2,
+    "network": 152,
+    "type": 16961,
+    "maxFee": "48000",
+    "deadline": "14229739681",
+    "transactionsHash": "C3327C865541E91BAA68D1CCE3A75E425BC7C5A16E51D87A1D6A9600880ACE2E",
+    "transactions": [
+      {
+        "transaction": {
+          "signerPublicKey": "4C4BD7F8E1E1AC61DB817089F9416A7EDC18339F06CDC851495B271533FAD13B",
+          "version": 1,
+          "network": 152,
+          "type": 16724,
+          "recipientAddress": "982982FFFC666CB09288FCB4B8F820E8B0B5F77093075AEF",
+          "mosaics": [
+            {
+              "id": "E74B99BA41F4AFEE",
+              "amount": "1000000"
+            }
+          ],
+          "message": "0074657374"
+        }
+      },
+      {
+        "transaction": {
+          "signerPublicKey": "13B00FBB13C7644E13BD786F0EA4F97820022A2606759793A5D3525A03F92A2F",
+          "version": 1,
+          "network": 152,
+          "type": 16724,
+          "recipientAddress": "983AB360969797AB6030FF53A1995F43B27C56C5B456E2D9",
+          "mosaics": [
+            {
+              "id": "E74B99BA41F4AFEE",
+              "amount": "1000000"
+            }
+          ],
+          "message": "0074657374"
+        }
+      }
+    ]
+  },
+  "meta": {
+    "hash": "156F449DBEE2E1D8C2E9C883F4DDE7DF0A92C719C096F4B9C25258B04E494001",
+    "merkleComponentHash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "height": "0"
+  }
+}
 ```
 
 指定アドレスが関係するすべてのアグリゲートトランザクションが検知されます。
 連署が必要かどうかは別途フィルターして判断します。
-
 
 ## 10.5 現場で使えるヒント
 ### 常時コネクション
 
 一覧からランダムに選択し、接続を試みます。
 
-##### ノードへの接続
-```js
-//ノード一覧
-NODES = ["https://node.com:3001",...];
+##### ノードへの接続チェック関数
+```cs
+static async Task<string> ConnectNode(string[] nodes)
+{
+    var httpClient = new HttpClient();
+    var node = nodes[new Random().Next(nodes.Length)];
+    httpClient.Timeout = TimeSpan.FromSeconds(2);
+    Console.WriteLine($"try: {node}");
 
-function connectNode(nodes) {
-    const node = nodes[Math.floor(Math.random() * nodes.length)] ;
-    console.log("try:" + node);
+    HttpResponseMessage response = null;
 
-    return new Promise((resolve, reject) => {
-        let req = new XMLHttpRequest();
-        req.timeout = 2000; //タイムアウト値:2秒(=2000ms)
-        req.open('GET', node + "/node/health", true);
-        req.onload = function() {
-            if (req.status === 200) {
-                const status = JSON.parse(req.responseText).status;
-                if(status.apiNode == "up" && status.db == "up"){
-                    return resolve(node);
-                }else{
-                    console.log("fail node status:" + status);
-                    return connectNode(nodes).then(node => resolve(node));
-                }
-            } else {
-                console.log("fail request status:" + req.status)
-                return connectNode(nodes).then(node => resolve(node));
+    try
+    {
+        httpClient.Timeout = TimeSpan.FromSeconds(2);
+        response = await httpClient.GetAsync($"{node}/node/health");
+
+        if (response.IsSuccessStatusCode)
+        {
+            var content = await response.Content.ReadAsStringAsync();
+            var status = JsonNode.Parse(content);
+            if ((string)status["status"]["apiNode"] == "up" && (string)status["status"]["db"] == "up")
+            {
+                var res = await httpClient.GetAsync($"{node}/network/properties");
+                var properties = JsonNode.Parse(await res.Content.ReadAsStringAsync());
+                if(properties?["network"]?["epochAdjustment"] != null)
+                    return node;
+
+                Console.WriteLine("fail network properties");
+                return await ConnectNode(nodes);
             }
-        };
-
-        req.onerror = function(e) {
-            console.log("onerror:" + e)
-            return connectNode(nodes).then(node => resolve(node));
-        };
-
-        req.ontimeout = function (e) {
-            console.log("ontimeout")
-            return connectNode(nodes).then(node => resolve(node));
-        };  
-
-    req.send();
-    });
+            else
+            {
+                Console.WriteLine($"fail node status: {status}");
+                return await ConnectNode(nodes);
+            }
+        }
+        else
+        {
+            Console.WriteLine($"fail request status: {response.StatusCode}");
+            return await ConnectNode(nodes);
+        }
+    }
+    catch (TaskCanceledException e)
+    {
+        Console.WriteLine($"ontimeout: {e}");
+        return await ConnectNode(nodes);
+    }
+    catch (Exception e)
+    {
+        Console.WriteLine($"onerror: {e}");
+        return await ConnectNode(nodes);
+    }
 }
 ```
 
 タイムアウト値を設定しておき、応答の悪いノードに接続した場合は選びなおします。
 エンドポイント /node/health　を確認してステータス異常の場合はノードを選びなおします。
 
-
-##### レポジトリの作成
-```js
-function createRepo(nodes){
-
-    return connectNode(nodes).then(async function onFulfilled(node) {
-
-        const repo = new sym.RepositoryFactoryHttp(node);
-
-        try{
-            epochAdjustment = await repo.getEpochAdjustment().toPromise();
-        }catch(error){
-          console.log("fail createRepo");
-          return await createRepo(nodes);
-        }
-        return await repo;
-    });
-}
-```
 まれに /network/properties のエンドポイントが解放されていないノードが存在するため、
-getEpochAdjustment() の情報を取得してチェックを行います。取得できない場合は再帰的にcreateRepoを読み込みます。
+EpochAdjustmentの情報を取得してチェックを行います。取得できない場合は再帰的にConnectNodeを読み込みます。
 
-
-##### リスナーの常時接続
+##### 正常なノードの検索
 ```js
-async function listenerKeepOpening(nodes){
-
-    const repo = await createRepo(NODES);
-    let wsEndpoint = repo.url.replace('http', 'ws') + "/ws";
-    const nsRepo = repo.createNamespaceRepository();
-    const lner = new sym.Listener(wsEndpoint,nsRepo,WebSocket);
-    try{
-        await lner.open();
-        lner.newBlock();
-    }catch(e){
-        console.log("fail websocket");
-        return await listenerKeepOpening(nodes);
-    }
-
-    lner.webSocket.onclose = async function(){
-        console.log("listener onclose");
-        return await listenerKeepOpening(nodes);
-    }
-  return lner;
-}
-```
-
-リスナーがcloseした場合は再接続します。
-
-##### リスナー開始
-```js
-listener = await listenerKeepOpening(NODES);
+//ノード一覧
+var NODES = new []
+{
+    "https://node.com:3001",
+    ,,,
+};
+var connectNode = await ConnectNode(NODES);
+Console.WriteLine(connectNode);
 ```
 
 ### 未署名トランザクション自動連署
 
 未署名のトランザクションを検知して、署名＆ネットワークにアナウンスします。  
-初期画面表示時と画面閲覧中の受信と２パターンの検知が必要です。  
+どのタイミングで検知するかはアプリケーションによって変わります。あくまでも本書では一例を載せますので、あくまでもサンプルとして活用してください。WebSocket、Http接続ライブラリなどは変わります。適切なNullチェックやエラー処理も必要です。
 
-```js
-//rxjsの読み込み
-op  = require("/node_modules/rxjs/operators");
-rxjs = require("/node_modules/rxjs");
-
-//アグリゲートトランザクション検知
-bondedListener = listener.aggregateBondedAdded(bob.address);
-bondedHttp = txRepo.search({address:bob.address,group:sym.TransactionGroup.Partial})
-.pipe(
-    op.delay(2000),
-    op.mergeMap(page => page.data)
-);
-
-//選択中アカウントの完了トランザクション検知リスナー
-const statusChanged = function(address,hash){
-
-    const transactionObservable = listener.confirmed(address);
-    const errorObservable = listener.status(address, hash);
-    return rxjs.merge(transactionObservable, errorObservable).pipe(
-        op.first(),
-        op.map((errorOrTransaction) => {
-            if (errorOrTransaction.constructor.name === "TransactionStatusError") {
-                throw new Error(errorOrTransaction.code);
-            } else {
-                return errorOrTransaction;
-            }
-        }),
-    );
-}
-
-//連署実行
-function exeAggregateBondedCosignature(tx){
-
-    txRepo.getTransactionsById([tx.transactionInfo.hash],sym.TransactionGroup.Partial)
-    .pipe(
-        //トランザクションが抽出された場合のみ
-        op.filter(aggTx => aggTx.length > 0)
-    )
-    .subscribe(async aggTx =>{
-
-        //インナートランザクションの署名者に自分が指定されている場合
-        if(aggTx[0].innerTransactions.find((inTx) => inTx.signer.equals(bob.publicAccount))!= undefined){
-            //Aliceのトランザクションで署名
-            const cosignatureTx = sym.CosignatureTransaction.create(aggTx[0]);
-            const signedTx = bob.signCosignatureTransaction(cosignatureTx);
-            const cosignedAggTx = await txRepo.announceAggregateBondedCosignature(signedTx).toPromise();
-            statusChanged(bob.address,signedTx.parentHash).subscribe(res=>{
-              console.log(res);
-            });
+```cs
+var NODES = new []
+{
+    "https://node.com:3001",
+    ,,,
+};
+var connectNode = await ConnectNode(NODES);
+var wsNode = connectNode.Replace("https", "wss") + "/ws";
+var listener = new Listener(wsNode, new ClientWebSocket());
+await listener.Open();
+await listener.AggregateBondedAdded(bobAddress.ToString(),async (tx)=>
+{
+    //bobに関連するアグリゲートトランザクション検知
+    var hash = tx["meta"]?["hash"]?.ToString();
+    var param = $"/transactions/partial/{hash}";
+    //該当Hashのトランザクション情報取得
+    var txInfo = JsonNode.Parse(await GetDataFromApi(node, param));
+    foreach (JsonNode t in (IEnumerable) txInfo["transaction"]["transactions"])
+    {
+        // bobの署名が必要なトランザクションのフィルタリング
+        if (t["transaction"]["signerPublicKey"].ToString() == bobPublicKey.ToString())
+        {
+            // 連署作成
+            var data = new Dictionary<string, string>()
+            {
+                {"parentHash", hash},
+                {"signature", bobKeyPair.Sign(hash).ToString()},
+                {"signerPublicKey", bobPublicKey.ToString()},
+                {"version", "0"}
+            };
+            var json = JsonSerializer.Serialize(data);
+            // Cosignatureトランザクションのアナウンス
+            var result = await AnnounceCosignature(json);
+            Console.WriteLine(result);
         }
-    });
-}
-
-bondedSubscribe = function(observer){
-    observer.pipe(
-
-        //すでに署名済みでない場合
-        op.filter(tx => {
-            return !tx.signedByAccount(sym.PublicAccount.createFromPublicKey(bob.publicKey ,networkType));
-        })
-    ).subscribe(tx=>{
-        console.log(tx);
-        exeAggregateBondedCosignature(tx);
-    });
-}
-
-bondedSubscribe(bondedListener);
-bondedSubscribe(bondedHttp);
+    }
+});
 ```
 
 ##### 注意事項

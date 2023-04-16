@@ -9,24 +9,13 @@
 
 トランザクションがブロックヘッダーに含まれていることを検証します。この検証が成功すれば、トランザクションがブロックチェーンの合意によって承認されたものとみなすことができます。
 
-本章のサンプルスクリプトを実行する前に以下を実行して必要ライブラリを読み込んでおいてください。
-```js
-Buffer = require("/node_modules/buffer").Buffer;
-cat = require("/node_modules/catbuffer-typescript");
-sha3_256 = require('/node_modules/js-sha3').sha3_256;
-
-accountRepo = repo.createAccountRepository();
-blockRepo = repo.createBlockRepository();
-stateProofService = new sym.StateProofService(repo);
-```
-
 ### 検証するペイロード
 
 今回検証するトランザクションペイロードとそのトランザクションが記録されているとされるブロック高です。
 
-```js
-payload = 'C00200000000000093B0B985101C1BDD1BC2BF30D72F35E34265B3F381ECA464733E147A4F0A6B9353547E2E08189EF37E50D271BEB5F09B81CE5816BB34A153D2268520AF630A0A0E5C72B0D5946C1EFEE7E5317C5985F106B739BB0BC07E4F9A288417B3CD6D26000000000198414140770200000000002A769FB40000000076B455CFAE2CCDA9C282BF8556D3E9C9C0DE18B0CBE6660ACCF86EB54AC51B33B001000000000000DB000000000000000E5C72B0D5946C1EFEE7E5317C5985F106B739BB0BC07E4F9A288417B3CD6D26000000000198544198205C1A4CE06C45B3A896B1B2360E03633B9F36BF7F22338B000000000000000066653465353435393833444430383935303645394533424446434235313637433046394232384135344536463032413837364535303734423641303337414643414233303344383841303630353343353345354235413835323835443639434132364235343233343032364244444331443133343139464435353438323930334242453038423832304100000000006800000000000000B2D4FD84B2B63A96AA37C35FC6E0A2341CEC1FD19C8FFC8D93CCCA2B028D1E9D000000000198444198205C1A4CE06C45B3A896B1B2360E03633B9F36BF7F2233BC089179EBBE01A81400140035383435344434373631364336433635373237396800000000000000B2D4FD84B2B63A96AA37C35FC6E0A2341CEC1FD19C8FFC8D93CCCA2B028D1E9D000000000198444198205C1A4CE06C45B3A896B1B2360E03633B9F36BF7F223345ECB996EDDB9BEB1400140035383435344434373631364336433635373237390000000000000000B2D4FD84B2B63A96AA37C35FC6E0A2341CEC1FD19C8FFC8D93CCCA2B028D1E9D5A71EBA9C924EFA146897BE6C9BB3DACEFA26A07D687AC4A83C9B03087640E2D1DDAE952E9DDBC33312E2C8D021B4CC0435852C0756B1EBD983FCE221A981D02';
-height = 59639;
+```cs
+var payload = "C001000000000000F95F520DF1E08FA936F3C57E7150062BD8710FB8290F5076540DFBFB22D22B32AED865F591C5AFA06D3A3A4208317973AE4CA24988C6C34EACE44B62EA40700C13B00FBB13C7644E13BD786F0EA4F97820022A2606759793A5D3525A03F92A2F000000000298414100AF000000000000272F7B5403000000E1B817E8E6186A67925A0C02DC514689F6684845E8F5A6564F4E7C37072E2D84B000000000000000540000000000000013B00FBB13C7644E13BD786F0EA4F97820022A2606759793A5D3525A03F92A2F0000000001985441983AB360969797AB6030FF53A1995F43B27C56C5B456E2D90400000000000000007478310000000054000000000000004C4BD7F8E1E1AC61DB817089F9416A7EDC18339F06CDC851495B271533FAD13B0000000001985441982982FFFC666CB09288FCB4B8F820E8B0B5F77093075AEF0400000000000000007478320000000000000000000000004C4BD7F8E1E1AC61DB817089F9416A7EDC18339F06CDC851495B271533FAD13B42C6293F8E8C2490260A452E2E8493D2CF03F733AD787C500941CC0043BCFE8E577D8480588094EB878696122809F8BB6CC285F6CB7E959733A1E2BBF8860B0B";
+var height = 381969;
 ```
 
 
@@ -34,35 +23,16 @@ height = 59639;
 
 トランザクションの内容を確認します。
 
-```js
-tx = sym.TransactionMapping.createFromPayload(payload);
-hash = sym.Transaction.createTransactionHash(payload,Buffer.from(generationHash, 'hex'));
-console.log(hash);
-console.log(tx);
+```cs
+var tx = TransactionHelper.TransactionDeserializer(payload, AggregateCompleteTransactionV2.Deserialize);
+var hash = facade.HashTransaction(tx, tx.Signature);
+Console.WriteLine(hash);
+Console.WriteLine(tx);
 ```
 ###### 出力例
-```js
-> 257E2CAECF4B477235CA93C37090E8BE58B7D3812A012E39B7B55BA7D7FFCB20
-> AggregateTransaction
-    > cosignatures: Array(1)
-      0: AggregateTransactionCosignature
-        signature: "5A71EBA9C924EFA146897BE6C9BB3DACEFA26A07D687AC4A83C9B03087640E2D1DDAE952E9DDBC33312E2C8D021B4CC0435852C0756B1EBD983FCE221A981D02"
-        signer: PublicAccount
-          address: Address {address: 'TAQFYGSM4BWELM5IS2Y3ENQOANRTXHZWX57SEMY', networkType: 152}
-          publicKey: "B2D4FD84B2B63A96AA37C35FC6E0A2341CEC1FD19C8FFC8D93CCCA2B028D1E9D"
-      deadline: Deadline {adjustedValue: 3030349354}
-    > innerTransactions: Array(3)
-        0: TransferTransaction {type: 16724, networkType: 152, version: 1, deadline: Deadline, maxFee: UInt64, …}
-        1: AccountMetadataTransaction {type: 16708, networkType: 152, version: 1, deadline: Deadline, maxFee: UInt64, …}
-        2: AccountMetadataTransaction {type: 16708, networkType: 152, version: 1, deadline: Deadline, maxFee: UInt64, …}
-      maxFee: UInt64 {lower: 161600, higher: 0}
-      networkType: 152
-      signature: "93B0B985101C1BDD1BC2BF30D72F35E34265B3F381ECA464733E147A4F0A6B9353547E2E08189EF37E50D271BEB5F09B81CE5816BB34A153D2268520AF630A0A"
-    > signer: PublicAccount
-        address: Address {address: 'TBIL6D6RURP45YQRWV6Q7YVWIIPLQGLZQFHWFEQ', networkType: 152}
-        publicKey: "0E5C72B0D5946C1EFEE7E5317C5985F106B739BB0BC07E4F9A288417B3CD6D26"
-      transactionInfo: undefined
-      type: 16705
+```cs
+> 2B104FF1E6F8B9DD643B17CE12D2B03601FA9D478E50F2BE8F77973D7C4AC4D9
+> (signature: F95F520DF1E08FA936F3C57E7150062BD8710FB8290F5076540DFBFB22D22B32AED865F591C5AFA06D3A3A4208317973AE4CA24988C6C34EACE44B62EA40700C, signerPublicKey: 13B00FBB13C7644E13BD786F0EA4F97820022A2606759793A5D3525A03F92A2F, version: 0x2, network: NetworkType.TESTNET, type: TransactionType.AGGREGATE_COMPLETE, fee: 0x000000000000AF00, deadline: 0x00000003547B2F27, transactionsHash: E1B817E8E6186A67925A0C02DC514689F6684845E8F5A6564F4E7C37072E2D84, transactions: [(signerPublicKey: 13B00FBB13C7644E13BD786F0EA4F97820022A2606759793A5D3525A03F92A2F, version: 0x1, network: NetworkType.TESTNET, type: TransactionType.TRANSFER, recipientAddress: 983AB360969797AB6030FF53A1995F43B27C56C5B456E2D9, mosaics: [], message: hex(00747831), ),(signerPublicKey: 4C4BD7F8E1E1AC61DB817089F9416A7EDC18339F06CDC851495B271533FAD13B, version: 0x1, network: NetworkType.TESTNET, type: TransactionType.TRANSFER, recipientAddress: 982982FFFC666CB09288FCB4B8F820E8B0B5F77093075AEF, mosaics: [], message: hex(00747832), )], cosignatures: [(version: 0x0, signerPublicKey: 4C4BD7F8E1E1AC61DB817089F9416A7EDC18339F06CDC851495B271533FAD13B, signature: 42C6293F8E8C2490260A452E2E8493D2CF03F733AD787C500941CC0043BCFE8E577D8480588094EB878696122809F8BB6CC285F6CB7E959733A1E2BBF8860B0B, )], )
 ```
 
 ### 署名者の検証
@@ -70,19 +40,13 @@ console.log(tx);
 トランザクションがブロックに含まれていることが確認できれば自明ですが、  
 念のため、アカウントの公開鍵でトランザクションの署名を検証しておきます。
 
-```js
-res = alice.publicAccount.verifySignature(
-    tx.getSigningBytes([...Buffer.from(payload,'hex')],[...Buffer.from(generationHash,'hex')]),
-    "93B0B985101C1BDD1BC2BF30D72F35E34265B3F381ECA464733E147A4F0A6B9353547E2E08189EF37E50D271BEB5F09B81CE5816BB34A153D2268520AF630A0A"
-);
-console.log(res);
+```cs
+var res = facade.VerifyTransaction(tx, tx.Signature, alicePublicKey);
+Console.WriteLine(res);
 ```
-```js
-> true
+```cs
+> True
 ```
-
-getSigningBytesで署名の対象となる部分だけを取り出しています。  
-通常のトランザクションとアグリゲートトランザクションでは取り出す部分が異なるので注意が必要です。  
 
 ### マークルコンポーネントハッシュの計算
 
@@ -90,58 +54,73 @@ getSigningBytesで署名の対象となる部分だけを取り出していま�
 一方でブロックヘッダーに格納されるマークルルートはトランザクションのハッシュに連署者の情報が含めたものが格納されます。  
 そのためトランザクションがブロック内部に存在しているかどうかを検証する場合は、トランザクションハッシュをマークルコンポーネントハッシュに変換しておく必要があります。
 
-```js
-merkleComponentHash = hash;
-if( tx.cosignatures !== undefined && tx.cosignatures.length > 0){
-  
-  const hasher = sha3_256.create();
-  hasher.update(Buffer.from(hash, 'hex'));
-  for (cosignature of tx.cosignatures ){
-    hasher.update(Buffer.from(cosignature.signer.publicKey, 'hex'));
-  }
-  merkleComponentHash = hasher.hex().toUpperCase();
+```cs
+using Org.BouncyCastle.Crypto.Digests;
+
+var merkleComponentHash = new byte[32];
+if(tx.Cosignatures.Length != 0)
+{
+    var hasher = new Sha3Digest(256);
+    hasher.BlockUpdate(hash.bytes, 0, hash.bytes.Length);
+    foreach (var cosignature in tx.Cosignatures)
+    {
+        hasher.BlockUpdate(cosignature.SignerPublicKey.bytes, 0, cosignature.SignerPublicKey.bytes.Length);
+    }
+    hasher.DoFinal(merkleComponentHash, 0);
 }
-console.log(merkleComponentHash);
+Console.WriteLine(Converter.BytesToHex(merkleComponentHash));
+
 ```
-```js
-> C8D1335F07DE05832B702CACB85B8EDAC2F3086543C76C9F56F99A0861E8F235
+```cs
+> 15FAE6AD62BE424C4E2D63A3553EBE0A7325CD3DE47F0BDC995386A59F08639A
 ```
 
 ### InBlockの検証
 
-ノードからマークルツリーを取得し、先ほど計算したmerkleComponentHashからブロックヘッダーのマークルルートが導出できることを確認します。
+ノードからマークルツリーを取得し、先ほど計算したmerkleComponentHashからブロックヘッダーのマークルルートが導出できることを確認します。<br>
+https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Block-routes/operation/getBlockByHeight
 
-```js
-function validateTransactionInBlock(leaf,HRoot,merkleProof){
+https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Block-routes/operation/getMerkleTransaction
 
-  if (merkleProof.length === 0) {
-    // There is a single item in the tree, so HRoot' = leaf.
-    return leaf.toUpperCase() === HRoot.toUpperCase();
-  }
-
-  const HRoot0 = merkleProof.reduce((proofHash, pathItem) => {
-    const hasher = sha3_256.create();
-    if (pathItem.position === sym.MerklePosition.Left) {
-      return hasher.update(Buffer.from(pathItem.hash + proofHash, 'hex')).hex();
-    } else {
-      return hasher.update(Buffer.from(proofHash + pathItem.hash, 'hex')).hex();
-    }
-  }, leaf);
-  return HRoot.toUpperCase() === HRoot0.toUpperCase();
+```cs
+static string ComputeHash(string input)
+{
+    var outputBytes = new byte[32];
+    var hasher = new Sha3Digest(256);
+    var inputBytes = Converter.HexToBytes(input);
+    hasher.BlockUpdate(inputBytes, 0, inputBytes.Length);
+    hasher.DoFinal(outputBytes, 0);
+    return Converter.BytesToHex(outputBytes);
 }
 
+static bool ValidateTransactionInBlock(string leaf, string hRoot, List<JsonNode> merkleProof)
+{
+    if (merkleProof.Count == 0)
+        return leaf.ToUpper() == hRoot.ToUpper();
+
+    var hRoot0 = merkleProof.Aggregate(leaf, (proofHash, pathItem) => {
+        if ((string)pathItem["position"] == "left")
+            return ComputeHash(pathItem["hash"] + proofHash);
+        return ComputeHash(proofHash + pathItem["hash"]);
+    });
+    return hRoot.ToUpper() == hRoot0.ToUpper();
+}
+
+var blockParam = $"/blocks/{height}";
+var blokInfo = JsonNode.Parse(await GetDataFromApi(node, blockParam));
+
+var param = $"/blocks/{height}/transactions/{Converter.BytesToHex(merkleComponentHash)}/merkle";
+var merkleInfo = JsonNode.Parse(await GetDataFromApi(node, param));
 //トランザクションから計算
-leaf = merkleComponentHash.toLowerCase();//merkleComponentHash
-
+var leaf = Converter.BytesToHex(merkleComponentHash);
 //ノードから取得
-HRoot = (await blockRepo.getBlockByHeight(height).toPromise()).blockTransactionsHash;
-merkleProof = (await blockRepo.getMerkleTransaction(height, leaf).toPromise()).merklePath;
-
-result = validateTransactionInBlock(leaf,HRoot,merkleProof);
-console.log(result);
+var HRoot = (string)blokInfo["block"]["transactionsHash"];
+var merkleProof = ((JsonArray) merkleInfo["merklePath"]).ToList();
+var result = ValidateTransactionInBlock(leaf, HRoot, merkleProof);
+Console.WriteLine(result);
 ```
-```js
-> true
+```cs
+> True
 ```
 
 トランザクションの情報がブロックヘッダーに含まれていることが確認できました。
@@ -150,38 +129,41 @@ console.log(result);
 
 既知のブロックハッシュ値（例：ファイナライズブロック）から、検証中のブロックヘッダーまでたどれることを検証します。
 
+BlockTypeは以下の３種類があります。
+```cs
+{32835: 'NemesisBlock', 33091: 'NormalBlock', 33347: 'ImportanceBlock'}
+```
 
 ### normalブロックの検証
 
-```js
-block = await blockRepo.getBlockByHeight(height).toPromise();
-previousBlock = await blockRepo.getBlockByHeight(height - 1).toPromise();
-if(block.type ===  sym.BlockType.NormalBlock){
-    
-  hasher = sha3_256.create();
-  hasher.update(Buffer.from(block.signature,'hex')); //signature
-  hasher.update(Buffer.from(block.signer.publicKey,'hex')); //publicKey
-  hasher.update(cat.GeneratorUtils.uintToBuffer(   block.version, 1));
-  hasher.update(cat.GeneratorUtils.uintToBuffer(   block.networkType, 1));
-  hasher.update(cat.GeneratorUtils.uintToBuffer(   block.type, 2));
-  hasher.update(cat.GeneratorUtils.uint64ToBuffer([block.height.lower    ,block.height.higher]));
-  hasher.update(cat.GeneratorUtils.uint64ToBuffer([block.timestamp.lower ,block.timestamp.higher]));
-  hasher.update(cat.GeneratorUtils.uint64ToBuffer([block.difficulty.lower,block.difficulty.higher]));
-  hasher.update(Buffer.from(block.proofGamma,'hex'));
-  hasher.update(Buffer.from(block.proofVerificationHash,'hex'));
-  hasher.update(Buffer.from(block.proofScalar,'hex'));
-  hasher.update(Buffer.from(previousBlock.hash,'hex'));
-  hasher.update(Buffer.from(block.blockTransactionsHash,'hex'));
-  hasher.update(Buffer.from(block.blockReceiptsHash,'hex'));
-  hasher.update(Buffer.from(block.stateHash,'hex'));
-  hasher.update(sym.RawAddress.stringToAddress(block.beneficiaryAddress.address));
-  hasher.update(cat.GeneratorUtils.uintToBuffer(   block.feeMultiplier, 4));
-  hash = hasher.hex().toUpperCase();
-  console.log(hash === block.hash);
-}
+```cs
+var height = 381959;
+var blockInfo = JsonNode.Parse(await GetDataFromApi(node, $"/blocks/{height}"));
+var previousBlockInfo = JsonNode.Parse(await GetDataFromApi(node, $"/blocks/{height - 1}"));
+if ((ushort) blockInfo["block"]["type"] != 33091) return;
+var hasher = new Sha3Digest(256);
+var hash = new byte[32];
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["block"]["signature"]), 0, 64);
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["block"]["signerPublicKey"]), 0, 32);
+hasher.BlockUpdate(BitConverter.GetBytes((byte)blockInfo["block"]["version"]), 0, 1);
+hasher.BlockUpdate(BitConverter.GetBytes((byte)blockInfo["block"]["network"]), 0, 1);
+hasher.BlockUpdate(BitConverter.GetBytes((ushort)blockInfo["block"]["type"]), 0, 2);
+hasher.BlockUpdate(BitConverter.GetBytes(ulong.Parse((string)blockInfo["block"]["height"])), 0, 8);
+hasher.BlockUpdate(BitConverter.GetBytes(ulong.Parse((string)blockInfo["block"]["timestamp"])), 0, 8);
+hasher.BlockUpdate(BitConverter.GetBytes(ulong.Parse((string)blockInfo["block"]["difficulty"])), 0, 8);
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["block"]["proofGamma"]), 0, 32);
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["block"]["proofVerificationHash"]), 0, 16);
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["block"]["proofScalar"]), 0, 32);
+hasher.BlockUpdate(Converter.HexToBytes((string)previousBlockInfo["meta"]["hash"]), 0, 32);
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["block"]["transactionsHash"]), 0, 32);
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["block"]["receiptsHash"]), 0, 32);
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["block"]["stateHash"]), 0, 32);
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["block"]["beneficiaryAddress"]), 0, 24);
+hasher.BlockUpdate(BitConverter.GetBytes((uint)blockInfo["block"]["feeMultiplier"]), 0, 4);
+hasher.DoFinal(hash, 0);
+Console.WriteLine((string)blockInfo["meta"]["hash"] == Converter.BytesToHex(hash));
 ```
-
-true が出力されればこのブロックハッシュは前ブロックハッシュ値の存在を認知していることになります。  
+True が出力されればこのブロックハッシュは前ブロックハッシュ値の存在を認知していることになります。  
 同様にしてn番目のブロックがn-1番目のブロックを存在を確認し、最後に検証中のブロックにたどり着きます。  
 
 これで、どのノードに問い合わせても確認可能な既知のファイナライズブロックが、  
@@ -197,77 +179,85 @@ NormalBlockに加えて以下の情報が追加されています。
 - totalVotingBalance
 - previousImportanceBlockHash
 
-```js
-block = await blockRepo.getBlockByHeight(height).toPromise();
-previousBlock = await blockRepo.getBlockByHeight(height - 1).toPromise();
-if(block.type ===  sym.BlockType.ImportanceBlock){
-
-  hasher = sha3_256.create();
-  hasher.update(Buffer.from(block.signature,'hex')); //signature
-  hasher.update(Buffer.from(block.signer.publicKey,'hex')); //publicKey
-  hasher.update(cat.GeneratorUtils.uintToBuffer(   block.version, 1));
-  hasher.update(cat.GeneratorUtils.uintToBuffer(   block.networkType, 1));
-  hasher.update(cat.GeneratorUtils.uintToBuffer(   block.type, 2));
-  hasher.update(cat.GeneratorUtils.uint64ToBuffer([block.height.lower    ,block.height.higher]));
-  hasher.update(cat.GeneratorUtils.uint64ToBuffer([block.timestamp.lower ,block.timestamp.higher]));
-  hasher.update(cat.GeneratorUtils.uint64ToBuffer([block.difficulty.lower,block.difficulty.higher]));
-  hasher.update(Buffer.from(block.proofGamma,'hex'));
-  hasher.update(Buffer.from(block.proofVerificationHash,'hex'));
-  hasher.update(Buffer.from(block.proofScalar,'hex'));
-  hasher.update(Buffer.from(previousBlock.hash,'hex'));
-  hasher.update(Buffer.from(block.blockTransactionsHash,'hex'));
-  hasher.update(Buffer.from(block.blockReceiptsHash,'hex'));
-  hasher.update(Buffer.from(block.stateHash,'hex'));
-  hasher.update(sym.RawAddress.stringToAddress(block.beneficiaryAddress.address));
-  hasher.update(cat.GeneratorUtils.uintToBuffer(   block.feeMultiplier, 4));
-  hasher.update(cat.GeneratorUtils.uintToBuffer(block.votingEligibleAccountsCount,4));
-  hasher.update(cat.GeneratorUtils.uint64ToBuffer([block.harvestingEligibleAccountsCount.lower,block.harvestingEligibleAccountsCount.higher]));
-  hasher.update(cat.GeneratorUtils.uint64ToBuffer([block.totalVotingBalance.lower,block.totalVotingBalance.higher]));
-  hasher.update(Buffer.from(block.previousImportanceBlockHash,'hex'));
-
-  hash = hasher.hex().toUpperCase();
-  console.log(hash === block.hash);
-}
+```cs
+var height = 381960;
+var blockInfo = JsonNode.Parse(await GetDataFromApi(node, $"/blocks/{height}"));
+var previousBlockInfo = JsonNode.Parse(await GetDataFromApi(node, $"/blocks/{height - 1}"));
+if ((ushort) blockInfo["block"]["type"] != 33347) return;
+var hasher = new Sha3Digest(256);
+var hash = new byte[32];
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["block"]["signature"]), 0, 64);
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["block"]["signerPublicKey"]), 0, 32);
+hasher.BlockUpdate(BitConverter.GetBytes((byte)blockInfo["block"]["version"]), 0, 1);
+hasher.BlockUpdate(BitConverter.GetBytes((byte)blockInfo["block"]["network"]), 0, 1);
+hasher.BlockUpdate(BitConverter.GetBytes((ushort)blockInfo["block"]["type"]), 0, 2);
+hasher.BlockUpdate(BitConverter.GetBytes(ulong.Parse((string)blockInfo["block"]["height"])), 0, 8);
+hasher.BlockUpdate(BitConverter.GetBytes(ulong.Parse((string)blockInfo["block"]["timestamp"])), 0, 8);
+hasher.BlockUpdate(BitConverter.GetBytes(ulong.Parse((string)blockInfo["block"]["difficulty"])), 0, 8);
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["block"]["proofGamma"]), 0, 32);
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["block"]["proofVerificationHash"]), 0, 16);
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["block"]["proofScalar"]), 0, 32);
+hasher.BlockUpdate(Converter.HexToBytes((string)previousBlockInfo["meta"]["hash"]), 0, 32);
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["block"]["transactionsHash"]), 0, 32);
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["block"]["receiptsHash"]), 0, 32);
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["block"]["stateHash"]), 0, 32);
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["block"]["beneficiaryAddress"]), 0, 24);
+hasher.BlockUpdate(BitConverter.GetBytes((uint)blockInfo["block"]["feeMultiplier"]), 0, 4);
+hasher.BlockUpdate(BitConverter.GetBytes((uint)blockInfo["block"]["votingEligibleAccountsCount"]), 0, 4);
+hasher.BlockUpdate(BitConverter.GetBytes(ulong.Parse((string)blockInfo["block"]["harvestingEligibleAccountsCount"])), 0, 8);
+hasher.BlockUpdate(BitConverter.GetBytes(ulong.Parse((string)blockInfo["block"]["totalVotingBalance"])), 0, 8);
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["block"]["previousImportanceBlockHash"]), 0, 32);
+hasher.DoFinal(hash, 0);
+Console.WriteLine((string)blockInfo["meta"]["hash"] == Converter.BytesToHex(hash));
 ```
 
 後述するアカウントやメタデータの検証のために、stateHashSubCacheMerkleRootsを検証しておきます。
 
 ### stateHashの検証
-```js
-console.log(block);
+```cs
+Console.WriteLine($"NormalBlockInfo: {blockInfo}");
 ```
-```js
-> NormalBlockInfo
-    height: UInt64 {lower: 59639, higher: 0}
-    hash: "B5F765D388B5381AC93659F501D5C68C00A2EE7DF4548C988E97F809B279839B"
-    stateHash: "9D6801C49FE0C31ADE5C1BB71019883378016FA35230B9813CA6BB98F7572758"
-  > stateHashSubCacheMerkleRoots: Array(9)
-        0: "4578D33DD0ED5B8563440DA88F627BBC95A174C183191C15EE1672C5033E0572"
-        1: "2C76DAD84E4830021BE7D4CF661218973BA467741A1FC4663B54B5982053C606"
-        2: "259FB9565C546BAD0833AD2B5249AA54FE3BC45C9A0C64101888AC123A156D04"
-        3: "58D777F0AA670440D71FA859FB51F8981AF1164474840C71C1BEB4F7801F1B27"
-        4: "C9092F0652273166991FA24E8B115ACCBBD39814B8820A94BFBBE3C433E01733"
-        5: "4B53B8B0E5EE1EEAD6C1498CCC1D839044B3AE5F85DD8C522A4376C2C92D8324"
-        6: "132324AF5536EC9AA85B2C1697F6B357F05EAFC130894B210946567E4D4E9519"
-        7: "8374F46FBC759049F73667265394BD47642577F16E0076CBB7B0B9A92AAE0F8E"
-        8: "45F6AC48E072992343254F440450EF4E840D8386102AD161B817E9791ABC6F7F"
+```cs
+> NormalBlockInfo: {
+  "meta": {
+    "hash": "6B7E8D85CAD9178BB392876DAABE67A6B9836373A07F614714FAE8A0879B3F4C",
+    "generationHash": "BF28FBA2F2C2C3F62897882CF3E7945DC8C5C27E9039F7647604CF91D488A7BA",
+    "totalFee": "0",
+    "totalTransactionsCount": 0,
+    "stateHashSubCacheMerkleRoots": [
+      "A82A1434A2115684EEEE1CE7FC17B5FA34172D62FAB42AF2365EF17A24E8FD8F",
+      "18C3D9EC283D662E3EC83DD9122F3D78077B800A4665BB784D8483A8E8D1E77D",
+      "D86FD52B9A0812F7F2EBEDA3957C3C1BF7BCD0DA5A56497C5B33DE372ADFC25F",
+      "295DA4F751A3A51E09F430E90BD37CD935129646586224DD14E1BED7B4F38BB5",
+      "0000000000000000000000000000000000000000000000000000000000000000",
+      "0000000000000000000000000000000000000000000000000000000000000000",
+      "D663DBB92948F056ADB0D62ACFF211993DFEB3C174386ACF6307BF4B20C18825",
+      "23D1614C66F429EECF60F7437A4F2104F853A47F4E3119F6EC4D85A293F9F2A2",
+      "9EA761073278891F8D962B3C88BC9F1922E5634575DC55820431DDCDBCF16137"
+    ],
+    "transactionsCount": 0,
+    "statementsCount": 1
+  },
 ```
-```js
-hasher = sha3_256.create();
-hasher.update(Buffer.from(block.stateHashSubCacheMerkleRoots[0],'hex')); //AccountState
-hasher.update(Buffer.from(block.stateHashSubCacheMerkleRoots[1],'hex')); //Namespace
-hasher.update(Buffer.from(block.stateHashSubCacheMerkleRoots[2],'hex')); //Mosaic
-hasher.update(Buffer.from(block.stateHashSubCacheMerkleRoots[3],'hex')); //Multisig
-hasher.update(Buffer.from(block.stateHashSubCacheMerkleRoots[4],'hex')); //HashLockInfo
-hasher.update(Buffer.from(block.stateHashSubCacheMerkleRoots[5],'hex')); //SecretLockInfo
-hasher.update(Buffer.from(block.stateHashSubCacheMerkleRoots[6],'hex')); //AccountRestriction
-hasher.update(Buffer.from(block.stateHashSubCacheMerkleRoots[7],'hex')); //MosaicRestriction
-hasher.update(Buffer.from(block.stateHashSubCacheMerkleRoots[8],'hex')); //Metadata
-hash = hasher.hex().toUpperCase();
-console.log(block.stateHash === hash);
+```cs
+var hasher = new Sha3Digest(256);
+var hash = new byte[32];
+
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["meta"]["stateHashSubCacheMerkleRoots"][0]), 0, 32); // AccountState
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["meta"]["stateHashSubCacheMerkleRoots"][1]), 0, 32); // Namespace
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["meta"]["stateHashSubCacheMerkleRoots"][2]), 0, 32); // Mosaic
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["meta"]["stateHashSubCacheMerkleRoots"][3]), 0, 32); // Multisig
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["meta"]["stateHashSubCacheMerkleRoots"][4]), 0, 32); // HashLockInfo
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["meta"]["stateHashSubCacheMerkleRoots"][5]), 0, 32); // SecretLockInfo
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["meta"]["stateHashSubCacheMerkleRoots"][6]), 0, 32); // AccountRestriction
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["meta"]["stateHashSubCacheMerkleRoots"][7]), 0, 32); // MosaicRestriction
+hasher.BlockUpdate(Converter.HexToBytes((string)blockInfo["meta"]["stateHashSubCacheMerkleRoots"][8]), 0, 32); // Metadata
+
+hasher.DoFinal(hash, 0);
+Console.WriteLine((string)blockInfo["block"]["stateHash"] == Converter.BytesToHex(hash));
 ```
-```js
-> true
+```cs
+> True
 ```
 
 ブロックヘッダーの検証に利用した9個のstateがstateHashSubCacheMerkleRootsから構成されていることがわかります。
@@ -280,53 +270,79 @@ console.log(block.stateHash === hash);
 
 ### 検証用共通関数
 
-```js
-//葉のハッシュ値取得関数
-function getLeafHash(encodedPath, leafValue){
-    const hasher = sha3_256.create();
-    return hasher.update(sym.Convert.hexToUint8(encodedPath + leafValue)).hex().toUpperCase();
+```cs
+// 葉のハッシュ値取得関数
+static string GetLeafHash(string encodedPath, string leafValue)
+{
+    var hasher = new Sha3Digest(256);
+    var input = Converter.HexToBytes(encodedPath + leafValue);
+    hasher.BlockUpdate(input, 0, input.Length);
+    var hash = new byte[hasher.GetDigestSize()];
+    hasher.DoFinal(hash, 0);
+    return Converter.BytesToHex(hash);
 }
 
-//枝のハッシュ値取得関数
-function getBranchHash(encodedPath, links){
-    const branchLinks = Array(16).fill(sym.Convert.uint8ToHex(new Uint8Array(32)));
-    links.forEach((link) => {
-        branchLinks[parseInt(`0x${link.bit}`, 16)] = link.link;
-    });
-    const hasher = sha3_256.create();
-    const bHash = hasher.update(sym.Convert.hexToUint8(encodedPath + branchLinks.join(''))).hex().toUpperCase();
-    return bHash;
+// 枝のハッシュ値取得関数
+static string GetBranchHash(string encodedPath, List<JsonNode> links)
+{
+    var branchLinks = Enumerable.Repeat("0000000000000000000000000000000000000000000000000000000000000000", 16).ToList();
+    foreach (var link in links)
+    {
+        branchLinks[int.Parse((string)link["bit"], NumberStyles.HexNumber)] = (string)link["link"];
+    }
+    var hasher = new Sha3Digest(256);
+    var input = Converter.HexToBytes(encodedPath + string.Join("", branchLinks));
+    hasher.BlockUpdate(input, 0, input.Length);
+    var hash = new byte[hasher.GetDigestSize()];
+    hasher.DoFinal(hash, 0);
+    return Converter.BytesToHex(hash);
 }
 
-//ワールドステートの検証
-function checkState(stateProof,stateHash,pathHash,rootHash){
+// ワールドステートの検証
+static void CheckState(JsonNode stateProof, string stateHash, string pathHash, string rootHash)
+{
+    JsonNode? merkleLeaf = null;
+    var merkleBranches = new List<JsonNode>();
+    foreach (var tree in (JsonArray)stateProof["tree"])
+    {
+        if((byte)tree["type"] == 255)
+        {
+            merkleLeaf = tree;
+        }
+        else
+        {
+            merkleBranches.Add(tree);
+        }
+    }
+    merkleBranches.Reverse();
+    if(merkleLeaf == null) throw new NullReferenceException("merkleTree is null");
+    var leafHash = GetLeafHash((string)merkleLeaf["encodedPath"], stateHash);
+    var linkHash = leafHash; // 最初のlinkHashはleafHash
+    
+    var bit = "";
+    foreach (var branch in merkleBranches)
+    {
+        var branchLink = ((JsonArray)branch["links"]).ToList().Find(x => (string)x["link"] == linkHash);
+        linkHash = GetBranchHash((string)branch["encodedPath"], ((JsonArray)branch["links"]).ToList());
+        var temp = (string) branch["path"] == ""
+            ? ""
+            : ((string) branch["path"]).Substring(0, (int) branch["nibbleCount"]);
+        bit = temp + (string)branchLink["bit"] + bit;
+    }
 
-  const merkleLeaf = stateProof.merkleTree.leaf;
-  const merkleBranches = stateProof.merkleTree.branches.reverse();
-  const leafHash = getLeafHash(merkleLeaf.encodedPath,stateHash);
+    var treeRootHash = linkHash; // 最後のlinkHashはrootHash
+    var treePathHash = bit + merkleLeaf["path"];
 
-  let linkHash = leafHash; //最初のlinkHashはleafHash
-  let bit="";
-  for(let i = 0; i < merkleBranches.length; i++){
-      const branch = merkleBranches[i];
-      const branchLink = branch.links.find(x=>x.link === linkHash)
-      linkHash = getBranchHash(branch.encodedPath,branch.links);
-      bit = merkleBranches[i].path.slice(0,merkleBranches[i].nibbleCount) + branchLink.bit + bit ;
-  }
+    if (treePathHash.Length % 2 == 1)
+    {
+        treePathHash = treePathHash.Substring(0, treePathHash.Length - 1);
+    }
 
-  const treeRootHash = linkHash; //最後のlinkHashはrootHash
-  let treePathHash = bit + merkleLeaf.path;
-
-  if(treePathHash.length % 2 == 1){
-    treePathHash = treePathHash.slice( 0, -1 );
-  }
- 
-  //検証
-  console.log(treeRootHash === rootHash);
-  console.log(treePathHash === pathHash);
+    // 検証
+    Console.WriteLine(treeRootHash == rootHash);
+    Console.WriteLine(treePathHash == pathHash);
 }
 ```
-
 
 ### 13.3.1 アカウント情報の検証
 
@@ -334,30 +350,9 @@ function checkState(stateProof,stateHash,pathHash,rootHash){
 マークルツリー上の分岐する枝をアドレスでたどり、
 ルートに到着できるかを確認します。
 
-```js
-stateProofService = new sym.StateProofService(repo);
+※本項はC#SDKにAccountInfoをシリアライズする関数がまだあらず、時間を要するので現時点ではオリジナル版にて学習してください。
 
-aliceAddress = sym.Address.createFromRawAddress("TBIL6D6RURP45YQRWV6Q7YVWIIPLQGLZQFHWFEQ");
-
-hasher = sha3_256.create();
-alicePathHash = hasher.update(
-  sym.RawAddress.stringToAddress(aliceAddress.plain())
-).hex().toUpperCase();
-
-hasher = sha3_256.create();
-aliceInfo = await accountRepo.getAccountInfo(aliceAddress).toPromise();
-aliceStateHash = hasher.update(aliceInfo.serialize()).hex().toUpperCase();
-
-//サービス提供者以外のノードから最新のブロックヘッダー情報を取得
-blockInfo = await blockRepo.search({order:"desc"}).toPromise();
-rootHash = blockInfo.data[0].stateHashSubCacheMerkleRoots[0];
-
-//サービス提供者を含む任意のノードからマークル情報を取得
-stateProof = await stateProofService.accountById(aliceAddress).toPromise();
-
-//検証
-checkState(stateProof,aliceStateHash,alicePathHash,rootHash);
-```
+https://github.com/xembook/quick_learning_symbol/blob/main/13_verify.md#1331-%E3%82%A2%E3%82%AB%E3%82%A6%E3%83%B3%E3%83%88%E6%83%85%E5%A0%B1%E3%81%AE%E6%A4%9C%E8%A8%BC
 
 
 ### 13.3.2 モザイクへ登録したメタデータの検証
@@ -366,54 +361,49 @@ checkState(stateProof,aliceStateHash,alicePathHash,rootHash);
 マークルツリー上の分岐する枝をメタデータキーで構成されるハッシュ値でたどり、
 ルートに到着できるかを確認します。
 
-```js
-srcAddress = Buffer.from(
-    sym.Address.createFromRawAddress("TBIL6D6RURP45YQRWV6Q7YVWIIPLQGLZQFHWFEQ").encoded(),
-    'hex'
-)
+```cs
+var sourceAddress = Converter.StringToAddress("TAUYF774MZWLBEUI7S2LR6BA5CYLL53QSMDVV3Y");
+var targetAddress = Converter.StringToAddress("TAUYF774MZWLBEUI7S2LR6BA5CYLL53QSMDVV3Y");
 
-targetAddress = Buffer.from(
-    sym.Address.createFromRawAddress("TBIL6D6RURP45YQRWV6Q7YVWIIPLQGLZQFHWFEQ").encoded(),
-    'hex'
-)
+//compositePathHash(Key値)
+var hasher = new Sha3Digest(256);
+var compositeHash = new byte[32];
+hasher.BlockUpdate(sourceAddress, 0, sourceAddress.Length);
+hasher.BlockUpdate(targetAddress, 0, targetAddress.Length);
+hasher.BlockUpdate(Converter.HexToBytes("90623009C157B457", true), 0, 8); // scopeKey
+hasher.BlockUpdate(Converter.HexToBytes("173AC1E38CBAD11D", true), 0, 8); // targetId
+hasher.BlockUpdate(new byte[]{1}, 0, 1); // type: Mosaic 1
+hasher.DoFinal(compositeHash, 0);
 
-hasher = sha3_256.create();    
-hasher.update(srcAddress);
-hasher.update(targetAddress);
-hasher.update(sym.Convert.hexToUint8Reverse("CF217E116AA422E2")); // scopeKey
-hasher.update(sym.Convert.hexToUint8Reverse("1275B0B7511D9161")); // targetId
-hasher.update(Uint8Array.from([sym.MetadataType.Mosaic])); // type: Account 0
-compositeHash = hasher.hex();
-
-hasher = sha3_256.create();   
-hasher.update( Buffer.from(compositeHash,'hex'));
-
-pathHash = hasher.hex().toUpperCase();
+var hasher2 = new Sha3Digest(256);
+var pathHash = new byte[32];
+hasher2.BlockUpdate(compositeHash, 0, compositeHash.Length);
+hasher2.DoFinal(pathHash, 0);
 
 //stateHash(Value値)
-hasher = sha3_256.create(); 
-hasher.update(cat.GeneratorUtils.uintToBuffer(1, 2)); //version
-hasher.update(srcAddress);
-hasher.update(targetAddress);
-hasher.update(sym.Convert.hexToUint8Reverse("CF217E116AA422E2")); // scopeKey
-hasher.update(sym.Convert.hexToUint8Reverse("1275B0B7511D9161")); // targetId
-hasher.update(Uint8Array.from([sym.MetadataType.Mosaic])); //account
+var hasher3 = new Sha3Digest(256);
+var stateHash = new byte[32];
+hasher3.BlockUpdate(new byte[]{1, 0}, 0, 2); // version
+hasher3.BlockUpdate(sourceAddress, 0, sourceAddress.Length);
+hasher3.BlockUpdate(targetAddress, 0, targetAddress.Length);
+hasher3.BlockUpdate(Converter.HexToBytes("90623009C157B457", true), 0, 8); // scopeKey
+hasher3.BlockUpdate(Converter.HexToBytes("173AC1E38CBAD11D", true), 0, 8); // targetId
+hasher3.BlockUpdate(new byte[]{1}, 0, 1); // type: Mosaic 1
 
-value = Buffer.from("test");
-
-hasher.update(cat.GeneratorUtils.uintToBuffer(value.length, 2)); 
-hasher.update(value); 
-stateHash = hasher.hex();
+var value = Converter.Utf8ToBytes("test");
+hasher3.BlockUpdate(BitConverter.GetBytes(value.Length), 0, 2);
+hasher3.BlockUpdate(value, 0, value.Length); // value
+hasher3.DoFinal(stateHash, 0);
 
 //サービス提供者以外のノードから最新のブロックヘッダー情報を取得
-blockInfo = await blockRepo.search({order:"desc"}).toPromise();
-rootHash = blockInfo.data[0].stateHashSubCacheMerkleRoots[8];
+var blockInfo = JsonNode.Parse(await GetDataFromApi(node, $"/blocks?order=desc"));
+var rootHash = blockInfo["data"][0]["meta"]["stateHashSubCacheMerkleRoots"][8];
 
 //サービス提供者を含む任意のノードからマークル情報を取得
-stateProof = await stateProofService.metadataById(compositeHash).toPromise();
+var stateProof = JsonNode.Parse(await GetDataFromApi(node, $"/metadata/{Converter.BytesToHex(compositeHash)}/merkle"));
 
 //検証
-checkState(stateProof,stateHash,pathHash,rootHash);
+CheckState(stateProof, Converter.BytesToHex(stateHash), Converter.BytesToHex(pathHash), (string)rootHash);
 ```
 
 ### 13.3.3 アカウントへ登録したメタデータの検証
@@ -422,53 +412,49 @@ checkState(stateProof,stateHash,pathHash,rootHash);
 マークルツリー上の分岐する枝をメタデータキーで構成されるハッシュ値でたどり、
 ルートに到着できるかを確認します。
 
-```js
-srcAddress = Buffer.from(
-    sym.Address.createFromRawAddress("TBIL6D6RURP45YQRWV6Q7YVWIIPLQGLZQFHWFEQ").encoded(),
-    'hex'
-)
-
-targetAddress = Buffer.from(
-    sym.Address.createFromRawAddress("TBIL6D6RURP45YQRWV6Q7YVWIIPLQGLZQFHWFEQ").encoded(),
-    'hex'
-)
+```cs
+var sourceAddress = Converter.StringToAddress("TAUYF774MZWLBEUI7S2LR6BA5CYLL53QSMDVV3Y");
+var targetAddress = Converter.StringToAddress("TAUYF774MZWLBEUI7S2LR6BA5CYLL53QSMDVV3Y");
 
 //compositePathHash(Key値)
-hasher = sha3_256.create();    
-hasher.update(srcAddress);
-hasher.update(targetAddress);
-hasher.update(sym.Convert.hexToUint8Reverse("9772B71B058127D7")); // scopeKey
-hasher.update(sym.Convert.hexToUint8Reverse("0000000000000000")); // targetId
-hasher.update(Uint8Array.from([sym.MetadataType.Account])); // type: Account 0
-compositeHash = hasher.hex();
+var hasher = new Sha3Digest(256);
+var compositeHash = new byte[32];
+hasher.BlockUpdate(sourceAddress, 0, sourceAddress.Length);
+hasher.BlockUpdate(targetAddress, 0, targetAddress.Length);
+hasher.BlockUpdate(Converter.HexToBytes("8705F15653EBBC43", true), 0, 8); // scopeKey
+hasher.BlockUpdate(Converter.HexToBytes("0000000000000000", true), 0, 8); // targetId
+hasher.BlockUpdate(new byte[]{0}, 0, 1); // type: Account 0
+hasher.DoFinal(compositeHash, 0);
 
-hasher = sha3_256.create();   
-hasher.update( Buffer.from(compositeHash,'hex'));
-
-pathHash = hasher.hex().toUpperCase();
+var hasher2 = new Sha3Digest(256);
+var pathHash = new byte[32];
+hasher2.BlockUpdate(compositeHash, 0, compositeHash.Length);
+hasher2.DoFinal(pathHash, 0);
 
 //stateHash(Value値)
-hasher = sha3_256.create(); 
-hasher.update(cat.GeneratorUtils.uintToBuffer(1, 2)); //version
-hasher.update(srcAddress);
-hasher.update(targetAddress);
-hasher.update(sym.Convert.hexToUint8Reverse("9772B71B058127D7")); // scopeKey
-hasher.update(sym.Convert.hexToUint8Reverse("0000000000000000")); // targetId
-hasher.update(Uint8Array.from([sym.MetadataType.Account])); //account
-value = Buffer.from("test");
-hasher.update(cat.GeneratorUtils.uintToBuffer(value.length, 2)); 
-hasher.update(value); 
-stateHash = hasher.hex();
+var hasher3 = new Sha3Digest(256);
+var stateHash = new byte[32];
+hasher3.BlockUpdate(new byte[]{1, 0}, 0, 2); // version
+hasher3.BlockUpdate(sourceAddress, 0, sourceAddress.Length);
+hasher3.BlockUpdate(targetAddress, 0, targetAddress.Length);
+hasher3.BlockUpdate(Converter.HexToBytes("8705F15653EBBC43", true), 0, 8); // scopeKey
+hasher3.BlockUpdate(Converter.HexToBytes("0000000000000000", true), 0, 8); // targetId
+hasher3.BlockUpdate(new byte[]{0}, 0, 1); // type: Account 0
+
+var value = Converter.Utf8ToBytes("test");
+hasher3.BlockUpdate(BitConverter.GetBytes(value.Length), 0, 2);
+hasher3.BlockUpdate(value, 0, value.Length); // value
+hasher3.DoFinal(stateHash, 0);
 
 //サービス提供者以外のノードから最新のブロックヘッダー情報を取得
-blockInfo = await blockRepo.search({order:"desc"}).toPromise();
-rootHash = blockInfo.data[0].stateHashSubCacheMerkleRoots[8];
+var blockInfo = JsonNode.Parse(await GetDataFromApi(node, $"/blocks?order=desc"));
+var rootHash = blockInfo["data"][0]["meta"]["stateHashSubCacheMerkleRoots"][8];
 
 //サービス提供者を含む任意のノードからマークル情報を取得
-stateProof = await stateProofService.metadataById(compositeHash).toPromise();
+var stateProof = JsonNode.Parse(await GetDataFromApi(node, $"/metadata/{Converter.BytesToHex(compositeHash)}/merkle"));
 
-//検証
-checkState(stateProof,stateHash,pathHash,rootHash);
+// 検証
+CheckState(stateProof, Converter.BytesToHex(stateHash), Converter.BytesToHex(pathHash), (string)rootHash);
 ```
 
 ## 13.4 現場で使えるヒント

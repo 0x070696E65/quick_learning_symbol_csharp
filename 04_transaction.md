@@ -33,33 +33,37 @@
 
 ### Bobへの転送トランザクション
 
-送信先のBobアドレスを作成しておきます。
-```js
-bob = sym.Account.generateNewAccount(networkType);
-console.log(bob.address);
+送信先のBobアドレスを秘密鍵から作成しておきます。
+```cs
+var bobPrivateKey = new PrivateKey("E3839324F3CD2FC194F6E1C501D4D2CFD0DC8CCAC4307AC328E3154FF009****");
+var bobKeyPair = new KeyPair(bobPrivateKey);
+var bobAddress = facade.Network.PublicKeyToAddress(bobKeyPair.PublicKey);
+Console.WriteLine($"bobAddress: {bobAddress}");
 ```
-```js
-> Address {address: 'TDWBA6L3CZ6VTZAZPAISL3RWM5VKMHM6J6IM3LY', networkType: 152}
+```cs
+> bobAddress: TCIWJYMLTTIPOYAXJD65XDOO7IFIZFXBRA3DS2Y
 ```
 
 トランザクションを作成します。
-```js
-tx = sym.TransferTransaction.create(
-    sym.Deadline.create(epochAdjustment), //Deadline:有効期限
-    sym.Address.createFromRawAddress("TDWBA6L3CZ6VTZAZPAISL3RWM5VKMHM6J6IM3LY"), 
-    [],
-    sym.PlainMessage.create("Hello Symbol!"), //メッセージ
-    networkType //テストネット・メインネット区分
-).setMaxFee(100); //手数料
+```cs
+var tx = new TransferTransactionV1
+{
+    Network = NetworkType.TESTNET, //テストネット・メインネット区分
+    RecipientAddress = new UnresolvedAddress(bobAddress.bytes),
+    SignerPublicKey = alicePublicKey,
+    Message = Converter.Utf8ToPlainMessage("Hello, Symbol"), //メッセージ
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp) //Deadline:有効期限
+};
+TransactionHelper.SetMaxFee(tx, 100); //手数料
 ```
 
 各設定項目について説明します。
 
 #### 有効期限
-sdkではデフォルトで2時間後に設定されます。
+この例では2時間で設定しています。
 最大6時間まで指定可能です。
-```js
-sym.Deadline.create(epochAdjustment,6)
+```cs
+Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(6).Timestamp)
 ```
 
 #### メッセージ
@@ -67,31 +71,27 @@ sym.Deadline.create(epochAdjustment,6)
 バイナリデータであってもrawdataとして送信することが可能です。
 
 ##### 空メッセージ
-```js
-sym.EmptyMessage
-```
+Messageプロパティを設定しないでください
 
 ##### 平文メッセージ
-```js
-sym.PlainMessage.create("Hello Symbol!")
+```cs
+Message = Converter.Utf8ToPlainMessage("Hello, Symbol")
 ```
 
 ##### 暗号文メッセージ
-```js
-sym.EncryptedMessage('294C8979156C0D941270BAC191F7C689E93371EDBC36ADD8B920CF494012A97BA2D1A3759F9A6D55D5957E9D');
+```cs
+var encrypted = Crypto.Encode("SENDER_PRIVATE_KEY", "RECIPIENT_PUBLIC_KEY", "MESSAGE");
+var encryptedMessage = Converter.Utf8ToEncryptoMessage(encrypted);
+  ,,,,
+Message = encryptedMessage
 ```
-
-EncryptedMessageを使用すると、「指定したメッセージが暗号化されています」という意味のフラグ（目印）がつきます。
-エクスプローラーやウォレットはそのフラグを参考にメッセージを無用にデコードしなかったり、非表示にしたりなどの処理を行います。
-このメソッドが暗号化をするわけではありません。
+Crypto.Encodeの第一引数に送信者の秘密鍵（16進数）、第二引数に受信者の公開鍵（16進数）、第三引数にString型の文字列を渡して暗号化された文字列を作成し、Converter.Utf8ToEncryptoMessageにて、「指定したメッセージが暗号化されています」という意味のフラグ（目印）をつけます。
+エクスプローラーやウォレットはそのフラグを参考にメッセージを無用にデコードしなかったり、非表示にしたりなどの処理を行います。そのためこのフラグを使用することが暗黙の了解とされています。
 
 ##### 生データ
-```js
-sym.RawMessage.create(uint8Arrays[i])
-```
+MessageプロパティにRawデータのByte[]を渡してください。
 
 #### 最大手数料
-
 ネットワーク手数料については、常に少し多めに払っておけば問題はないのですが、最低限の知識は持っておく必要があります。
 アカウントはトランザクションを作成するときに、ここまでは手数料として払ってもいいという最大手数料を指定します。
 一方で、ノードはその時々で最も高い手数料となるトランザクションのみブロックにまとめて収穫しようとします。
@@ -100,22 +100,25 @@ sym.RawMessage.create(uint8Arrays[i])
 
 トランザクションサイズ x feeMultiprilerというもので決定されます。
 176バイトだった場合 maxFee を100で設定すると 17600μXYM = 0.0176XYMを手数料として支払うことを許容します。
-feeMultiprier = 100として指定する方法とmaxFee = 17600 として指定する方法があります。
+そのためFeeプロパティに直接手数料を設定するよりもサイズに合わせてトランザクション構築後にFeeを設定することをおすすめします。
 
 ##### feeMultiprier = 100として指定する方法
-```js
-tx = sym.TransferTransaction.create(
+```cs
+var tx = new TransferTransactionV1
+{
+  Network = NetworkType.TESTNET,
   ,,,,
-  networkType
-).setMaxFee(100);
+);
+TransactionHelper.SetMaxFee(tx, 100);
 ```
 
 ##### maxFee = 17600 として指定する方法
-```js
-tx = sym.TransferTransaction.create(
+```cs
+var tx = new TransferTransactionV1
+{
+  Network = NetworkType.TESTNET,
   ,,,,
-  networkType,
-  sym.UInt64.fromUint(17600)
+  Fee = new Amount(17600);
 );
 ```
 
@@ -126,22 +129,16 @@ tx = sym.TransferTransaction.create(
 作成したトランザクションを秘密鍵で署名して、任意のノードを通じてアナウンスします。
 
 ### 署名
-```js
-signedTx = alice.sign(tx,generationHash);
-console.log(signedTx);
+```cs
+var signature = facade.SignTransaction(aliceKeyPair, tx);
+Console.WriteLine($"Signature: {signature}");
 ```
 ###### 出力例
-```js
-> SignedTransaction
-    hash: "3BD00B0AF24DE70C7F1763B3FD64983C9668A370CB96258768B715B117D703C2"
-    networkType: 152
-    payload:        
-"AE00000000000000CFC7A36C17060A937AFE1191BC7D77E33D81F3CC48DF9A0FFE892858DFC08C9911221543D687813ECE3D36836458D2569084298C09223F9899DF6ABD41028D0AD4933FC1E4C56F9DF9314E9E0533173E1AB727BDB2A04B59F048124E93BEFBD20000000001985441F843000000000000879E76C702000000986F4982FE77894ABC3EBFDC16DFD4A5C2C7BC05BFD44ECE0E000000000000000048656C6C6F2053796D626F6C21"
-    signerPublicKey: "D4933FC1E4C56F9DF9314E9E0533173E1AB727BDB2A04B59F048124E93BEFBD2"
-    type: 16724
+```cs
+> Signature: 4609EAB80ADD25B16710D00B712F7A7E4916E08B5F0F00ACB65365C179AFA851EC8D22DF9192321A745B20C032F477673EB73423EFC26A3FC6CFD8476097D90C
 ```
 
-トランザクションの署名にはAccountクラスとgenerationHash値が必要です。
+トランザクションの署名にはgenerationHash値が必要ですがfacade作成時の引数であるネットワーク設定にハードコーディングされています。
 
 generationHash
 - テストネット
@@ -152,15 +149,31 @@ generationHash
 generationHash値はそのブロックチェーンネットワークを一意に識別するための値です。
 同じ秘密鍵をもつ他のネットワークに使いまわされないようにそのネットワーク個別のハッシュ値を織り交ぜて署名済みトランザクションを作成します。
 
-
+今後トランザクションのアナウンスを繰り返すので以下のようにアナウンス用の関数を用意しておくと良いでしょう。なお、本書ではHttpClientを使用しますが環境等に合わせて修正してください。
+```cs
+static async Task<string> Announce(string payload)
+{
+    using var client = new HttpClient();
+    var content = new StringContent(payload, Encoding.UTF8, "application/json");
+    var response =  client.PutAsync(node + "/transactions", content).Result;
+    return await response.Content.ReadAsStringAsync();
+}
+```
 ### アナウンス
-```js
-res = await txRepo.announce(signedTx).toPromise();
-console.log(res);
+```cs
+var payload = TransactionsFactory.AttachSignature(tx, signature);
+Console.WriteLine(payload);
+var hash = facade.HashTransaction(tx, signature);
+Console.WriteLine(hash);
+var result = await Announce(payload);
+Console.WriteLine(result);
 ```
-```js
-> TransactionAnnounceResponse {message: 'packet 9 was pushed to the network via /transactions'}
+```cs
+> {"payload": "A000000000000000472B014BC52C3A712104D1B0A2B90A41CAF68E3B30E93B918539013CCE7566F5F4E2AE68C16FA15A8CF52C7A8FB440E91309590E417B27836AA37A4ACA331F0C13B00FBB13C7644E13BD786F0EA4F97820022A2606759793A5D3525A03F92A2F0000000001985441803E00000000000067789C3F0300000098E02F5B8E1C4EDA515D9785CC4AB96B274ACC51890026A50000000000000000"}
+B7F3EC314FB83A7D22D21431E9DE578BE3D41E7AAFC7D67E36048FB4AA6EDEFA
+{"message":"packet 9 was pushed to the network via /transactions"}
 ```
+トランザクションを受け付けるエンドポイントにペイロードを送信するためのJsonを作成しPut送信します。
 
 上記のスクリプトのように `packet n was pushed to the network` というレスポンスがあれば、トランザクションはノードに受理されたことになります。
 これはトランザクションのフォーマット等に異常が無かった程度の意味しかありません。
@@ -179,19 +192,21 @@ Uncaught Error: {"statusCode":409,"statusMessage":"Unknown Error","body":"{\"cod
 
 ノードに受理されたトランザクションのステータスを確認
 
-```js
-tsRepo = repo.createTransactionStatusRepository();
-transactionStatus = await tsRepo.getTransactionStatus(signedTx.hash).toPromise();
-console.log(transactionStatus);
+```cs
+var param = $"/transactionStatus/{hash}";
+var transactionStatus = JsonNode.Parse(await GetDataFromApi(node, param));
+Console.WriteLine(transactionStatus);
 ```
 ###### 出力例
-```js
-> TransactionStatus
-    group: "confirmed"
-    code: "Success"
-    deadline: Deadline {adjustedValue: 11989512431}
-    hash: "661360E61C37E156B0BE18E52C9F3ED1022DCE846A4609D72DF9FA8A5B667747"
-    height: undefined
+```cs
+> 
+{
+  "group": "confirmed",
+  "code": "Success",
+  "hash": "B7F3EC314FB83A7D22D21431E9DE578BE3D41E7AAFC7D67E36048FB4AA6EDEFA",
+  "deadline": "13954168653",
+  "height": "370966"
+}
 ```
 
 承認されると ` group: "confirmed"`となっています。
@@ -199,12 +214,14 @@ console.log(transactionStatus);
 受理されたものの、エラーが発生していた場合は以下のような出力となります。トランザクションを書き直して再度アナウンスしてみてください。
 
 ```js
-> TransactionStatus
-    group: "failed"
-    code: "Failure_Core_Insufficient_Balance"
-    deadline: Deadline {adjustedValue: 11990156766}
-    hash: "A82507C6C46DF444E36AC94391EA2D0D7DD1A218948DED465A7A4F9D1B53CA0E"
-    height: undefined
+> 
+{
+  "group": "failed",
+  "code": "Failure_Core_Insufficient_Balance",
+  "hash": "A82507C6C46DF444E36AC94391EA2D0D7DD1A218948DED465A7A4F9D1B53CA0E",
+  "deadline": "11990156766",
+  "height": "undefined"
+}
 ```
 
 以下のようにResourceNotFoundエラーが発生した場合はトランザクションが受理されていません。
@@ -220,12 +237,12 @@ Uncaught Error: {"statusCode":404,"statusMessage":"Unknown Error","body":"{\"cod
 トランザクションがブロックに承認されるまでに30秒程度かかります。
 
 #### エクスプローラーで確認
-signedTx.hash で取得できるハッシュ値を使ってエクスプローラーで検索してみましょう。
+hash で取得できたハッシュ値を使ってエクスプローラーで検索してみましょう。
 
-```js
-console.log(signedTx.hash);
+```cs
+Console.WriteLine(hash);
 ```
-```js
+```cs
 > "661360E61C37E156B0BE18E52C9F3ED1022DCE846A4609D72DF9FA8A5B667747"
 ```
 
@@ -234,32 +251,45 @@ console.log(signedTx.hash);
 - テストネット　
   - https://testnet.symbol.fyi/transactions/661360E61C37E156B0BE18E52C9F3ED1022DCE846A4609D72DF9FA8A5B667747
 
-#### SDKで確認
+#### REST APIで確認
 
-```js
-txInfo = await txRepo.getTransaction(signedTx.hash,sym.TransactionGroup.Confirmed).toPromise();
-console.log(txInfo);
+```cs
+var param = $"/transactions/confirmed/{hash}";
+var jsonString = await GetDataFromApi(node, param);
+Console.WriteLine(jsonString);
+var transaction = JsonNode.Parse(jsonString);
+Console.WriteLine($"Signature: {transaction["transaction"]["signature"]}");
 ```
+デシリアライズする前の文字列とデシリアライズ後のSignatureをサンプルに出力してみます。
+
 ###### 出力例
 ```js
-> TransferTransaction
-    deadline: Deadline {adjustedValue: 12883929118}
-    maxFee: UInt64 {lower: 17400, higher: 0}
-    message: PlainMessage {type: 0, payload: 'Hello Symbol!'}
-    mosaics: []
-    networkType: 152
-    payloadSize: 174
-    recipientAddress: Address {address: 'TDWBA6L3CZ6VTZAZPAISL3RWM5VKMHM6J6IM3LY', networkType: 152}
-    signature: "7A3562DCD7FEE4EE9CB456E48EFEEC687647119DC053DE63581FD46CA9D16A829FA421B39179AABBF4DE0C1D987B58490E3F95C37327358E6E461832E3B3A60D"
-    signer: PublicAccount {publicKey: '0E5C72B0D5946C1EFEE7E5317C5985F106B739BB0BC07E4F9A288417B3CD6D26', address: Address}
-  > transactionInfo: TransactionInfo
-        hash: "DA4B672E68E6561EAE560FB89B144AFE1EF75D2BE0D9B6755D90388F8BCC4709"
-        height: UInt64 {lower: 330012, higher: 0}
-        id: "626413050A21EB5CD286E17D"
-        index: 1
-        merkleComponentHash: "DA4B672E68E6561EAE560FB89B144AFE1EF75D2BE0D9B6755D90388F8BCC4709"
-    type: 16724
-    version: 1
+> 
+{
+	"meta": {
+		"height": "370966",
+		"hash": "B7F3EC314FB83A7D22D21431E9DE578BE3D41E7AAFC7D67E36048FB4AA6EDEFA",
+		"merkleComponentHash": "B7F3EC314FB83A7D22D21431E9DE578BE3D41E7AAFC7D67E36048FB4AA6EDEFA",
+		"index": 0,
+		"timestamp": "13947005958",
+		"feeMultiplier": 100
+	},
+	"transaction": {
+		"size": 174,
+		"signature": "3C2E15F2BAED8780A454737B168515422158378355EC6946C82A1178DE7D8BF12FC6897FB6EABF1079EDB8462AEE700A84D8FA9BFF5959FCD63EBBFD27A1980F",
+		"signerPublicKey": "13B00FBB13C7644E13BD786F0EA4F97820022A2606759793A5D3525A03F92A2F",
+		"version": 1,
+		"network": 152,
+		"type": 16724,
+		"maxFee": "17400",
+		"deadline": "13954168653",
+		"recipientAddress": "98B8FBAF8D63C9E392382E56E4A8E015365BBA5AF95371EB",
+		"message": "0048656C6C6F2C2053796D626F6C",
+		"mosaics": []
+	},
+	"id": "643509A1D7D26E76F9292A94"
+}
+Signature: 3C2E15F2BAED8780A454737B168515422158378355EC6946C82A1178DE7D8BF12FC6897FB6EABF1079EDB8462AEE700A84D8FA9BFF5959FCD63EBBFD27A1980F
 ```
 ##### 注意点
 
@@ -267,59 +297,52 @@ console.log(txInfo);
 ブロックが承認された後、数ブロックの承認が進むと、ロールバックの発生する確率は減少していきます。
 また、Votingノードの投票で実施されるファイナライズブロックを待つことで、記録されたデータは確実なものとなります。
 
-##### スクリプト例
-トランザクションをアナウンスした後は以下のようなスクリプトを流すと、チェーンの状態を把握しやすくて便利です。
-```js
-hash = signedTx.hash;
-tsRepo = repo.createTransactionStatusRepository();
-transactionStatus = await tsRepo.getTransactionStatus(hash).toPromise();
-console.log(transactionStatus);
-txInfo = await txRepo.getTransaction(hash,sym.TransactionGroup.Confirmed).toPromise();
-console.log(txInfo);
-```
-
 ## 4.5トランザクション履歴
 
 Aliceが送受信したトランザクション履歴を一覧で取得します。
-```js
-result = await txRepo.search(
-  {
-    group:sym.TransactionGroup.Confirmed,
-    embedded:true,
-    address:alice.address
-  }
-).toPromise();
 
-txes = result.data;
-txes.forEach(tx => {
-  console.log(tx);
-})
+https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Transaction-routes/operation/searchConfirmedTransactions
+
+以下のように取得します。例では最初のトランザクションのハッシュを出力していますがご自身の必要な情報に合わせてください。
+```cs
+var param = $"/transactions/confirmed?embedded=true&address={aliceAddress}";
+var jsonString = await GetDataFromApi(node, param);
+var transactions = JsonNode.Parse(await GetDataFromApi(node, param));
+Console.WriteLine(transactions["data"]);
 ```
 ###### 出力例
 ```js
-> TransferTransaction
-    type: 16724
-    networkType: 152
-    payloadSize: 176
-    deadline: Deadline {adjustedValue: 11905303680}
-    maxFee: UInt64 {lower: 200000000, higher: 0}
-    recipientAddress: Address {address: 'TBXUTAX6O6EUVPB6X7OBNX6UUXBMPPAFX7KE5TQ', networkType: 152}
-    signature: "E5924A1EB653240A7220405A4DD4E221E71E43327B3BA691D267326FEE3F57458E8721907188DB33A3F2A9CB1D0293845B4D0F1D7A93C8A3389262D1603C7108"
-    signer: PublicAccount {publicKey: 'BDFAF3B090270920A30460AA943F9D8D4FCFF6741C2CB58798DBF7A2ED6B75AB', address: Address}
-  > message: RawMessage
-      payload: ""
-      type: -1
-  > mosaics: Array(1)
-      0: Mosaic
-        amount: UInt64 {lower: 10000000, higher: 0}
-        id: MosaicId
-          id: Id {lower: 760461000, higher: 981735131}
-  > transactionInfo: TransactionInfo
-      hash: "308472D34BE1A58B15A83B9684278010F2D69B59E39127518BE38A4D22EEF31D"
-      height: UInt64 {lower: 301717, higher: 0}
-      id: "6255242053E0E706653116F9"
-      index: 0
-      merkleComponentHash: "308472D34BE1A58B15A83B9684278010F2D69B59E39127518BE38A4D22EEF31D"
+> 
+[
+  {
+    "meta": {
+      "height": "5384",
+      "hash": "1B5DA615114774D75105258D8CFE50EB58B48519A40BA4A377679471ABECC993",
+      "merkleComponentHash": "1B5DA615114774D75105258D8CFE50EB58B48519A40BA4A377679471ABECC993",
+      "index": 2,
+      "timestamp": "323445994",
+      "feeMultiplier": 1136363
+    },
+    "transaction": {
+      "size": 176,
+      "signature": "EA758302AB948DFBE6DF1131DB7907ED48428FD08215CC187816151DA72E34DADFDE9DB1FB1C29A70BBB9719DD3857543264375A3756B5479D9DBCED5A4D9706",
+      "signerPublicKey": "81EA7C15E7EC06261C9F654F54EAC4748CFCF00E09A8FE47779ACD14A7602004",
+      "version": 1,
+      "network": 152,
+      "type": 16724,
+      "maxFee": "200000000",
+      "deadline": "330633658",
+      "recipientAddress": "982982FFFC666CB09288FCB4B8F820E8B0B5F77093075AEF",
+      "mosaics": [
+        {
+          "id": "72C0212E67A08BCE",
+          "amount": "1000000000"
+        }
+      ]
+    },
+    "id": "636CF155D7D26E76F900C871"
+  },
+  ,,,,
 ```
 
 TransactionTypeは以下の通りです。
@@ -327,10 +350,6 @@ TransactionTypeは以下の通りです。
 {0: 'RESERVED', 16705: 'AGGREGATE_COMPLETE', 16707: 'VOTING_KEY_LINK', 16708: 'ACCOUNT_METADATA', 16712: 'HASH_LOCK', 16716: 'ACCOUNT_KEY_LINK', 16717: 'MOSAIC_DEFINITION', 16718: 'NAMESPACE_REGISTRATION', 16720: 'ACCOUNT_ADDRESS_RESTRICTION', 16721: 'MOSAIC_GLOBAL_RESTRICTION', 16722: 'SECRET_LOCK', 16724: 'TRANSFER', 16725: 'MULTISIG_ACCOUNT_MODIFICATION', 16961: 'AGGREGATE_BONDED', 16963: 'VRF_KEY_LINK', 16964: 'MOSAIC_METADATA', 16972: 'NODE_KEY_LINK', 16973: 'MOSAIC_SUPPLY_CHANGE', 16974: 'ADDRESS_ALIAS', 16976: 'ACCOUNT_MOSAIC_RESTRICTION', 16977: 'MOSAIC_ADDRESS_RESTRICTION', 16978: 'SECRET_PROOF', 17220: 'NAMESPACE_METADATA', 17229: 'MOSAIC_SUPPLY_REVOCATION', 17230: 'MOSAIC_ALIAS', 17232: 'ACCOUNT_OPERATION_RESTRICTION'
 ```
 
-MessageTypeは以下の通りです。
-```js
-{0: 'PlainMessage', 1: 'EncryptedMessage', 254: 'PersistentHarvestingDelegationMessage', -1: 'RawMessage'}
-```
 ## 4.6 アグリゲートトランザクション
 
 Symbolでは複数のトランザクションを1ブロックにまとめてアナウンスすることができます。
@@ -339,43 +358,51 @@ Symbolでは複数のトランザクションを1ブロックにまとめてア�
 本章ではアグリゲートトランザクションのうち、簡単なものだけを紹介します。
 ### 起案者の署名だけが必要な場合
 
-```js
-bob = sym.Account.generateNewAccount(networkType);
-carol = sym.Account.generateNewAccount(networkType);
+```cs
+var bobPrivateKey = new PrivateKey("E3839324F3CD2FC194F6E1C501D4D2CFD0DC8CCAC4307AC328E3154FF009****");
+var bobKeyPair = new KeyPair(bobPrivateKey);
+var bobAddress = facade.Network.PublicKeyToAddress(bobKeyPair.PublicKey);
 
-innerTx1 = sym.TransferTransaction.create(
-    undefined, //Deadline
-    bob.address,  //送信先
-    [],
-    sym.PlainMessage.create("tx1"),
-    networkType
-);
+var carolKeyPair = KeyPair.GenerateNewKeyPair();
+var carolAddress = facade.Network.PublicKeyToAddress(carolKeyPair.PublicKey);
 
-innerTx2 = sym.TransferTransaction.create(
-    undefined, //Deadline
-    carol.address,  //送信先
-    [],
-    sym.PlainMessage.create("tx2"),
-    networkType
-);
+var innerTx1 = new EmbeddedTransferTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    RecipientAddress = new UnresolvedAddress(bobAddress.bytes),
+    SignerPublicKey = alicePublicKey,
+    Message = Converter.Utf8ToPlainMessage("tx1")
+};
+var innerTx2 = new EmbeddedTransferTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    RecipientAddress = new UnresolvedAddress(carolAddress.bytes),
+    SignerPublicKey = alicePublicKey,
+    Message = Converter.Utf8ToPlainMessage("tx2")
+};
+var innerTransactions = new IBaseTransaction[] { innerTx1, innerTx2 };
+var merkleHash = SymbolFacade.HashEmbeddedTransactions(innerTransactions);
+var aggregateTx = new AggregateCompleteTransactionV2()
+{
+    Network = NetworkType.TESTNET,
+    SignerPublicKey = alicePublicKey,
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp),
+    Transactions = innerTransactions,
+    TransactionsHash = merkleHash,
+};
+TransactionHelper.SetMaxFee(aggregateTx, 100);
 
-aggregateTx = sym.AggregateTransaction.createComplete(
-    sym.Deadline.create(epochAdjustment),
-    [
-      innerTx1.toAggregate(alice.publicAccount), //送信元アカウントの公開鍵
-      innerTx2.toAggregate(alice.publicAccount)  //送信元アカウントの公開鍵
-    ],
-    networkType,
-    [],
-    sym.UInt64.fromUint(1000000)
-);
-signedTx = alice.sign(aggregateTx,generationHash);
-await txRepo.announce(signedTx).toPromise();
+var signature = facade.SignTransaction(aliceKeyPair, aggregateTx);
+var payload = TransactionsFactory.AttachSignature(aggregateTx, signature);
+var hash = facade.HashTransaction(aggregateTx, signature);
+
+var result = await Announce(payload);
+Console.WriteLine(result);
 ```
 
 まず、アグリゲートトランザクションに含めるトランザクションを作成します。
 このときDeadlineを指定する必要はありません。
-リスト化するときに、生成したトランザクションにtoAggregateを追加して送信元アカウントの公開鍵を指定します。
+この時、SignerPublicKeyにインナートランザクションの送信元の公開鍵を指定します。
 ちなみに送信元アカウントと署名アカウントが **必ずしも一致するとは限りません** 。
 後の章での解説で「Bobの送信トランザクションをAliceが署名する」といった事が起こり得るためこのような書き方をします。
 これはSymbolブロックチェーンでトランザクションを扱ううえで最も重要な概念になります。
@@ -414,12 +441,23 @@ sha256sum Linuxファイルパス
 トランザクションのペイロードには1023バイトしか格納できないため、
 大きなデータは分割してペイロードに詰め込んでアグリゲートトランザクションにします。
 
-```js
-bigdata = 'C00200000000000093B0B985101C1BDD1BC2BF30D72F35E34265B3F381ECA464733E147A4F0A6B9353547E2E08189EF37E50D271BEB5F09B81CE5816BB34A153D2268520AF630A0A0E5C72B0D5946C1EFEE7E5317C5985F106B739BB0BC07E4F9A288417B3CD6D26000000000198414140770200000000002A769FB40000000076B455CFAE2CCDA9C282BF8556D3E9C9C0DE18B0CBE6660ACCF86EB54AC51B33B001000000000000DB000000000000000E5C72B0D5946C1EFEE7E5317C5985F106B739BB0BC07E4F9A288417B3CD6D26000000000198544198205C1A4CE06C45B3A896B1B2360E03633B9F36BF7F22338B000000000000000066653465353435393833444430383935303645394533424446434235313637433046394232384135344536463032413837364535303734423641303337414643414233303344383841303630353343353345354235413835323835443639434132364235343233343032364244444331443133343139464435353438323930334242453038423832304100000000006800000000000000B2D4FD84B2B63A96AA37C35FC6E0A2341CEC1FD19C8FFC8D93CCCA2B028D1E9D000000000198444198205C1A4CE06C45B3A896B1B2360E03633B9F36BF7F2233BC089179EBBE01A81400140035383435344434373631364336433635373237396800000000000000B2D4FD84B2B63A96AA37C35FC6E0A2341CEC1FD19C8FFC8D93CCCA2B028D1E9D000000000198444198205C1A4CE06C45B3A896B1B2360E03633B9F36BF7F223345ECB996EDDB9BEB1400140035383435344434373631364336433635373237390000000000000000B2D4FD84B2B63A96AA37C35FC6E0A2341CEC1FD19C8FFC8D93CCCA2B028D1E9D5A71EBA9C924EFA146897BE6C9BB3DACEFA26A07D687AC4A83C9B03087640E2D1DDAE952E9DDBC33312E2C8D021B4CC0435852C0756B1EBD983FCE221A981D02';
-
-let payloads = [];
-for (let i = 0; i < bigdata.length / 1023; i++) {
-    payloads.push(bigdata.substr(i * 1023, 1023));
+```cs
+const string bigdata = "C00200000000000093B0B985101C1BDD1BC2BF30D72F35E34265B3F381ECA464733E147A4F0A6B9353547E2E08189EF37E50D271BEB5F09B81CE5816BB34A153D2268520AF630A0A0E5C72B0D5946C1EFEE7E5317C5985F106B739BB0BC07E4F9A288417B3CD6D26000000000198414140770200000000002A769FB40000000076B455CFAE2CCDA9C282BF8556D3E9C9C0DE18B0CBE6660ACCF86EB54AC51B33B001000000000000DB000000000000000E5C72B0D5946C1EFEE7E5317C5985F106B739BB0BC07E4F9A288417B3CD6D26000000000198544198205C1A4CE06C45B3A896B1B2360E03633B9F36BF7F22338B000000000000000066653465353435393833444430383935303645394533424446434235313637433046394232384135344536463032413837364535303734423641303337414643414233303344383841303630353343353345354235413835323835443639434132364235343233343032364244444331443133343139464435353438323930334242453038423832304100000000006800000000000000B2D4FD84B2B63A96AA37C35FC6E0A2341CEC1FD19C8FFC8D93CCCA2B028D1E9D000000000198444198205C1A4CE06C45B3A896B1B2360E03633B9F36BF7F2233BC089179EBBE01A81400140035383435344434373631364336433635373237396800000000000000B2D4FD84B2B63A96AA37C35FC6E0A2341CEC1FD19C8FFC8D93CCCA2B028D1E9D000000000198444198205C1A4CE06C45B3A896B1B2360E03633B9F36BF7F223345ECB996EDDB9BEB1400140035383435344434373631364336433635373237390000000000000000B2D4FD84B2B63A96AA37C35FC6E0A2341CEC1FD19C8FFC8D93CCCA2B028D1E9D5A71EBA9C924EFA146897BE6C9BB3DACEFA26A07D687AC4A83C9B03087640E2D1DDAE952E9DDBC33312E2C8D021B4CC0435852C0756B1EBD983FCE221A981D02";
+var payloads = SplitString(bigdata, 1023);
+foreach (var p in payloads)
+{
+    Console.WriteLine(p);
 }
-console.log(payloads);
+
+static List<string> SplitString(string str, int chunkSize)
+{
+    var chunks = new List<string>();
+    var strLength = str.Length;
+    for (var i = 0; i < strLength; i += chunkSize) {
+        var length = Math.Min(chunkSize, strLength - i);
+        var chunk = str.Substring(i, length);
+        chunks.Add(chunk);
+    }
+    return chunks;
+}
 ```

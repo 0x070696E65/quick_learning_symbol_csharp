@@ -12,21 +12,29 @@
 ## 9.0 アカウントの準備
 この章のサンプルソースコードで使用するアカウントを作成し、それぞれの秘密鍵を出力しておきます。
 本章でマルチシグ化したアカウントBobは、Carolの秘密鍵を紛失すると使えなくなってしまうのでご注意ください。
+※本章のBobはマルチシグ化するため新たに作成することをおすすめします。
 
-```js
-bob = sym.Account.generateNewAccount(networkType);
-carol1 = sym.Account.generateNewAccount(networkType);
-carol2 = sym.Account.generateNewAccount(networkType);
-carol3 = sym.Account.generateNewAccount(networkType);
-carol4 = sym.Account.generateNewAccount(networkType);
-carol5 = sym.Account.generateNewAccount(networkType);
+```cs
+var bobKeyPair = KeyPair.GenerateNewKeyPair();
+var carolKeyPair1 = KeyPair.GenerateNewKeyPair();
+var carolKeyPair2 = KeyPair.GenerateNewKeyPair();
+var carolKeyPair3 = KeyPair.GenerateNewKeyPair();
+var carolKeyPair4 = KeyPair.GenerateNewKeyPair();
+var carolKeyPair5 = KeyPair.GenerateNewKeyPair();
 
-console.log(bob.privateKey);
-console.log(carol1.privateKey);
-console.log(carol2.privateKey);
-console.log(carol3.privateKey);
-console.log(carol4.privateKey);
-console.log(carol5.privateKey);
+Console.WriteLine(bobKeyPair.PrivateKey);
+Console.WriteLine(carolKeyPair1.PrivateKey);
+Console.WriteLine(carolKeyPair2.PrivateKey);
+Console.WriteLine(carolKeyPair3.PrivateKey);
+Console.WriteLine(carolKeyPair4.PrivateKey);
+Console.WriteLine(carolKeyPair5.PrivateKey);
+
+var bobAddress = facade.Network.PublicKeyToAddress(bobKeyPair.PublicKey);
+var carol1Address = facade.Network.PublicKeyToAddress(carol1KeyPair.PublicKey);
+var carol2Address = facade.Network.PublicKeyToAddress(carol2KeyPair.PublicKey);
+var carol3Address = facade.Network.PublicKeyToAddress(carol3KeyPair.PublicKey);
+var carol4Address = facade.Network.PublicKeyToAddress(carol4KeyPair.PublicKey);
+var carol5Address = facade.Network.PublicKeyToAddress(carol5KeyPair.PublicKey);
 ```
 
 テストネットの場合はFAUCETでネットワーク手数料分をbobとcarol1に補給しておきます。
@@ -35,9 +43,9 @@ console.log(carol5.privateKey);
     - https://testnet.symbol.tools/
 
 ##### URL出力
-```js
-console.log("https://testnet.symbol.tools/?recipient=" + bob.address.plain() +"&amount=20");
-console.log("https://testnet.symbol.tools/?recipient=" + carol1.address.plain() +"&amount=20");
+```cs
+Console.WriteLine($"https://testnet.symbol.tools/?recipient={bobAddress}&amount=20");
+Console.WriteLine($"https://testnet.symbol.tools/?recipient={carol1Address}&amount=20");
 ```
 
 ## 9.1 マルチシグの登録
@@ -45,55 +53,100 @@ console.log("https://testnet.symbol.tools/?recipient=" + carol1.address.plain() 
 Symbolではマルチシグアカウントを新規に作成するのではなく、既存アカウントについて連署者を指定してマルチシグ化します。
 マルチシグ化には連署者に指定されたアカウントの承諾署名(オプトイン)が必要なため、アグリゲートトランザクションを使用します。
 
-```js
-multisigTx = sym.MultisigAccountModificationTransaction.create(
-    undefined, 
-    3, //minApproval:承認のために必要な最小署名者数増分
-    3, //minRemoval:除名のために必要な最小署名者数増分
-    [
-        carol1.address,carol2.address,carol3.address,carol4.address
-    ], //追加対象アドレスリスト
-    [],//除名対象アドレスリスト
-    networkType
-);
+```cs
+var multisigTx = new EmbeddedMultisigAccountModificationTransactionV1()
+{
+    MinApprovalDelta = 3, //minApproval:承認のために必要な最小署名者数増分
+    MinRemovalDelta = 3, //minRemoval:除名のために必要な最小署名者数増分
+    AddressAdditions = new[]
+    {
+        new UnresolvedAddress(carol1Address.bytes),
+        new UnresolvedAddress(carol2Address.bytes),
+        new UnresolvedAddress(carol3Address.bytes),
+        new UnresolvedAddress(carol4Address.bytes),
+    }, //追加対象アドレスリスト
+    SignerPublicKey = bobKeyPair.PublicKey, //マルチシグ化したいアカウントの公開鍵を指定
+    Network = NetworkType.TESTNET
+};
+var innerTransactions = new IBaseTransaction[] {multisigTx};
+var merkleHash = SymbolFacade.HashEmbeddedTransactions(innerTransactions);
 
-aggregateTx = sym.AggregateTransaction.createComplete(
-    sym.Deadline.create(epochAdjustment),
-    [//マルチシグ化したいアカウントの公開鍵を指定
-      multisigTx.toAggregate(bob.publicAccount),
-    ],
-    networkType,[]
-).setMaxFeeForAggregate(100, 4); // 第二引数に連署者の数:4
+var aggregateTx = new AggregateCompleteTransactionV2(){
+    Network = NetworkType.TESTNET,
+    Transactions = 	innerTransactions,
+    SignerPublicKey = bobKeyPair.PublicKey,
+    TransactionsHash = merkleHash,
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp)
+};
+TransactionHelper.SetMaxFee(aggregateTx, 100, 4/*連署者の数*/);
+Console.WriteLine(aggregateTx.Fee);
 
-signedTx =  aggregateTx.signTransactionWithCosignatories(
-    bob, //マルチシグ化したいアカウント
-    [carol1,carol2,carol3,carol4], //追加・除外対象として指定したアカウント
-    generationHash,
-);
-await txRepo.announce(signedTx).toPromise();
+var bobSignature = facade.SignTransaction(bobKeyPair, aggregateTx); //マルチシグ化したいアカウント
+TransactionsFactory.AttachSignature(aggregateTx, bobSignature);
+
+var hash = facade.HashTransaction(aggregateTx);
+
+var caror1Cosignature = new Cosignature
+{
+    Signature = carol1KeyPair.Sign(hash.bytes),
+    SignerPublicKey = carol1KeyPair.PublicKey
+};  //追加・除外対象として指定したアカウント
+var caror2Cosignature = new Cosignature
+{
+    Signature = carol2KeyPair.Sign(hash.bytes),
+    SignerPublicKey = carol2KeyPair.PublicKey
+};  //追加・除外対象として指定したアカウント
+var caror3Cosignature = new Cosignature
+{
+    Signature = carol3KeyPair.Sign(hash.bytes),
+    SignerPublicKey = carol3KeyPair.PublicKey
+};  //追加・除外対象として指定したアカウント
+var caror4Cosignature = new Cosignature
+{
+    Signature = carol4KeyPair.Sign(hash.bytes),
+    SignerPublicKey = carol4KeyPair.PublicKey
+};  //追加・除外対象として指定したアカウント
+aggregateTx.Cosignatures = new []
+{
+    caror1Cosignature,
+    caror2Cosignature,
+    caror3Cosignature,
+    caror4Cosignature
+};
+
+var payload = TransactionsFactory.CreatePayload(aggregateTx);
+var result = await Announce(payload);
+Console.WriteLine(result);
 ```
 
 ## 9.2 確認
 
 ### マルチシグ化したアカウントの確認
-```js
-msigRepo = repo.createMultisigRepository();
 
-multisigInfo = await msigRepo.getMultisigAccountInfo(bob.address).toPromise();
-console.log(multisigInfo);
+https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Multisig-routes/operation/getAccountMultisig
+
+```cs
+var param = $"/account/{bobAddress}/multisig";
+var multisigAccountInfo = JsonNode.Parse(await GetDataFromApi(node, param));
+Console.WriteLine($"MultisigAccountInfo: {multisigAccountInfo}");
 ```
 ###### 出力例
 ```js
-> MultisigAccountInfo 
-    accountAddress: Address {address: 'TCOMA5VG67TZH4X55HGZOXOFP7S232CYEQMOS7Q', networkType: 152}
-  > cosignatoryAddresses: Array(4)
-        0: Address {address: 'TBAFGZOCB7OHZCCYYV64F2IFZL7SOOXNDHFS5NY', networkType: 152}
-        1: Address {address: 'TB3XP4GQK6XH2SSA2E2U6UWCESNACK566DS4COY', networkType: 152}
-        2: Address {address: 'TCV67BMTD2JMDQOJUDQHBFJHQPG4DAKVKST3YJI', networkType: 152}
-	3: Address {address: 'TDWGG6ZWCGS5AHFTF5FDB347HIMII57PK46AIDA', networkType: 152}
-    minApproval: 3
-    minRemoval: 3
-    multisigAddresses: []
+> MultisigAccountInfo: {
+  "multisig": {
+    "version": 1,
+    "accountAddress": "987FBEA14740E5F97C72BD46B9C73860496A1B82923B02E8",
+    "minApproval": 3,
+    "minRemoval": 3,
+    "cosignatoryAddresses": [
+      "984F5658989C315F34E5BFC72834E2D3C13D7236334DC6F7",
+      "989C37EBE03C38A48A8AC0BD37EBED48D0D6BECDF96527A6",
+      "98B01F1BBBA35D6A727B3FBE8F4FFB423E175615F9CADA69",
+      "98CA6BD25936FAAEFBE124729E0541EEC0DA080CCC8D3FFB"
+    ],
+    "multisigAddresses": []
+  }
+}
 ```
 
 cosignatoryAddressesが連署者として登録されていることがわかります。
@@ -101,21 +154,25 @@ cosignatoryAddressesが連署者として登録されていることがわかり
 minRemoval: 3により連署者を取り外すために必要な署名者数は3であることがわかります。
 
 ### 連署者アカウントの確認
-```js
-msigRepo = repo.createMultisigRepository();
-
-multisigInfo = await msigRepo.getMultisigAccountInfo(carol1.address).toPromise();
-console.log(multisigInfo);
+```cs
+var param = $"/account/{carol1Address}/multisig";
+var multisigAccountInfo = JsonNode.Parse(await GetDataFromApi(node, param));
+Console.WriteLine($"MultisigAccountInfo: {multisigAccountInfo}");
 ```
 ###### 出力例
-```
-> MultisigAccountInfo
-    accountAddress: Address {address: 'TCV67BMTD2JMDQOJUDQHBFJHQPG4DAKVKST3YJI', networkType: 152}
-    cosignatoryAddresses: []
-    minApproval: 0
-    minRemoval: 0
-  > multisigAddresses: Array(1)
-        0: Address {address: 'TCOMA5VG67TZH4X55HGZOXOFP7S232CYEQMOS7Q', networkType: 152}
+```cs
+> MultisigAccountInfo: {
+  "multisig": {
+    "version": 1,
+    "accountAddress": "984F5658989C315F34E5BFC72834E2D3C13D7236334DC6F7",
+    "minApproval": 0,
+    "minRemoval": 0,
+    "cosignatoryAddresses": [],
+    "multisigAddresses": [
+      "987FBEA14740E5F97C72BD46B9C73860496A1B82923B02E8"
+    ]
+  }
+}
 ```
 
 multisigAddresses に対して連署する権利を持っていることが分かります。
@@ -128,29 +185,55 @@ multisigAddresses に対して連署する権利を持っていることが分�
 
 アグリゲートコンプリートトランザクションの場合、ノードにアナウンスする前に連署者の署名を全て集めてからトランザクションを作成します。
 
-```js
-tx = sym.TransferTransaction.create(
-    undefined,
-    alice.address, 
-    [new sym.Mosaic(new sym.NamespaceId("symbol.xym"),sym.UInt64.fromUint(1000000))],
-    sym.PlainMessage.create('test'),
-    networkType
-);
+```cs
+var tx = new EmbeddedTransferTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    RecipientAddress = new UnresolvedAddress(aliceAddress.bytes),
+    SignerPublicKey = bobKeyPair.PublicKey, //マルチシグ化したアカウントの公開鍵を指定
+    Mosaics = new UnresolvedMosaic[]
+    {
+        new()
+        {
+            MosaicId = new UnresolvedMosaicId(IdGenerator.GenerateNamespaceId("symbol.xym")),
+            Amount = new Amount(1000000)
+        }
+    },
+    Message = Converter.Utf8ToPlainMessage("test")
+};
 
-aggregateTx = sym.AggregateTransaction.createComplete(
-    sym.Deadline.create(epochAdjustment),
-     [//マルチシグ化したアカウントの公開鍵を指定
-       tx.toAggregate(bob.publicAccount)
-     ],
-    networkType,[],
-).setMaxFeeForAggregate(100, 2); // 第二引数に連署者の数:2
+var innerTransactions = new IBaseTransaction[] {tx};
+var merkleHash = SymbolFacade.HashEmbeddedTransactions(innerTransactions);
 
-signedTx =  aggregateTx.signTransactionWithCosignatories(
-    carol1, //起案者
-    [carol2,carol3],　//連署者
-    generationHash,
-);
-await txRepo.announce(signedTx).toPromise();
+var aggregateTx = new AggregateCompleteTransactionV2()
+{
+    Network = NetworkType.TESTNET,
+    SignerPublicKey = carol1KeyPair.PublicKey,
+    Transactions = innerTransactions,
+    TransactionsHash = merkleHash,
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp)
+};
+TransactionHelper.SetMaxFee(aggregateTx, 100, 2/*連署者の数*/);
+
+var signature = facade.SignTransaction(carol1KeyPair, aggregateTx); //起案者による署名
+TransactionsFactory.AttachSignature(aggregateTx, signature);
+
+var hash = facade.HashTransaction(aggregateTx);
+var cosignature1 = new Cosignature
+{
+    Signature = carol2KeyPair.Sign(hash.bytes),
+    SignerPublicKey = carol2KeyPair.PublicKey
+};//連署者による署名
+var cosignature2 = new Cosignature
+{
+    Signature = carol3KeyPair.Sign(hash.bytes),
+    SignerPublicKey = carol3KeyPair.PublicKey
+};//連署者による署名
+aggregateTx.Cosignatures = new [] {cosignature1, cosignature2};
+
+var payload = TransactionsFactory.CreatePayload(aggregateTx);
+var result = await Announce(payload);
+Console.WriteLine(result);
 ```
 
 ### アグリゲートボンデッドトランザクションで送信
@@ -158,42 +241,76 @@ await txRepo.announce(signedTx).toPromise();
 アグリゲートボンデッドトランザクションの場合は連署者を指定せずにアナウンスできます。
 事前にハッシュロックでトランザクションを留め置きしておくことを宣言しておき、連署者がネットワーク上に留め置きされたトランザクションに追加署名することで完成となります。
 
-```js
-tx = sym.TransferTransaction.create(
-    undefined,
-    alice.address, //Aliceへの送信
-    [new sym.Mosaic(new sym.NamespaceId("symbol.xym"),sym.UInt64.fromUint(1000000))], //1XYM
-    sym.PlainMessage.create('test'),
-    networkType
-);
+```cs
+var namespaceId = IdGenerator.GenerateNamespaceId("symbol.xym");
 
-aggregateTx = sym.AggregateTransaction.createBonded(
-    sym.Deadline.create(epochAdjustment),
-     [ //マルチシグ化したアカウントの公開鍵を指定
-       tx.toAggregate(bob.publicAccount)
-     ],
-    networkType,[],
-).setMaxFeeForAggregate(100, 0); // 第二引数に連署者の数:0
+var tx = new EmbeddedTransferTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    RecipientAddress = new UnresolvedAddress(aliceAddress.bytes),  //Aliceへの送信
+    SignerPublicKey = bobKeyPair.PublicKey, //マルチシグ化したアカウントの公開鍵を指定
+    Mosaics = new [] //1XYM
+    {
+        new UnresolvedMosaic()
+        {
+            MosaicId = new UnresolvedMosaicId(IdGenerator.GenerateNamespaceId("symbol.xym")),
+            Amount = new Amount(1000000)
+        }
+    },
+    Message = Converter.Utf8ToPlainMessage("test")
+};
 
-signedAggregateTx = carol1.sign(aggregateTx, generationHash);
+var innerTransactions = new IBaseTransaction[] {tx};
+var merkleHash = SymbolFacade.HashEmbeddedTransactions(innerTransactions);
 
-hashLockTx = sym.HashLockTransaction.create(
-  sym.Deadline.create(epochAdjustment),
-	new sym.Mosaic(new sym.NamespaceId("symbol.xym"),sym.UInt64.fromUint(10 * 1000000)), //固定値:10XYM
-	sym.UInt64.fromUint(480),
-	signedAggregateTx,
-	networkType
-).setMaxFee(100);
+var aggregateTx = new AggregateBondedTransactionV2() {
+    Network = NetworkType.TESTNET,
+    Transactions = 	innerTransactions,
+    SignerPublicKey = carol1KeyPair.PublicKey,
+    TransactionsHash = merkleHash,
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp),
+};
+TransactionHelper.SetMaxFee(aggregateTx, 100, 2/*連署者の数*/);
 
-signedLockTx = carol1.sign(hashLockTx, generationHash);
+//署名
+var carol1Signature = facade.SignTransaction(carol1KeyPair, aggregateTx);
+var payloadBonded = TransactionsFactory.AttachSignature(aggregateTx, carol1Signature);
+//ボンデッドのペイロードを控えておく
+Console.WriteLine(payloadBonded);
+
+var hash = facade.HashTransaction(aggregateTx);
+//連署テスト用にハッシュも控えておく
+Console.WriteLine(hash);
+
+//ハッシュロックTX作成
+var hashLockTx = new HashLockTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    SignerPublicKey = carol1KeyPair.PublicKey,
+    Mosaic = new UnresolvedMosaic() //10xym固定値
+    {
+        MosaicId = new UnresolvedMosaicId(namespaceId),
+        Amount = new Amount(10 * 1000000)
+    },
+    Duration = new BlockDuration(480),
+    Hash = hash,
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp),
+};
+TransactionHelper.SetMaxFee(hashLockTx, 100);
+
+//署名
+var signature = facade.SignTransaction(carol1KeyPair, hashLockTx);
+var payload = TransactionsFactory.AttachSignature(hashLockTx, signature);
 
 //ハッシュロックTXをアナウンス
-await txRepo.announce(signedLockTx).toPromise();
+var result = await Announce(payload);
+Console.WriteLine(result);
 ```
 
-```js
+```cs
 //ハッシュロックの承認を確認した後、ボンデッドTXをアナウンス
-await txRepo.announceAggregateBonded(signedAggregateTx).toPromise();
+var payload = "{\"payload\": \"100100000000000001C0964F392FE2D55373E69AF3DB4DA33E302B2DFA1C29BBA4B6CA1FC5F70CAB5F832D6ED0C38C3B49DD4D322C2A0A6E8F336071ADD0BA878CDBDFCCD0AA5B0D414CDBF3CAAE880CFD095E0AD8A87B56383C63BA4FDFC6980CFE9E4D82EFE121000000000298414280BB000000000000D33B0D4F03000000175EED761F28B8E3E053A44F374A0D97C4D3A27A558E6BC364FB38B7F31F5363680000000000000065000000000000003120B9824211E91C596C98B4FA46E129FE26B2EAD259C5D4C90C41836D18E9840000000001985441982982FFFC666CB09288FCB4B8F820E8B0B5F77093075AEF0500010000000000EEAFF441BA994BE740420F00000000000074657374000000\"}";
+var result = await AnnounceBonded(payload);
 ```
 ボンデッドトランザクションがノードに取り込まれるとパーシャル署名状態となるので、8.ロックで紹介した連署を使用して、マルチシグアカウントで連署します。
 連署をサポートするウォレットで承認することもできます。
@@ -203,70 +320,92 @@ await txRepo.announceAggregateBonded(signedAggregateTx).toPromise();
 
 マルチシグで行った送信トランザクションの結果を確認してみます。
 
-```js
-txInfo = await txRepo.getTransaction(signedTx.hash,sym.TransactionGroup.Confirmed).toPromise();
-console.log(txInfo);
+```cs
+var hash = "EFCD8B70E854BDE519E6D576DF563BF22351338A6453EF87372072231140B674";
+var param = $"/transactions/confirmed/{hash}";
+var txInfo = JsonNode.Parse(await GetDataFromApi(node, param));
+Console.WriteLine($"TxInfo: {txInfo}");
 ```
 ###### 出力例
-```js
-> AggregateTransaction
-  > cosignatures: Array(2)
-        0: AggregateTransactionCosignature
-            signature: "554F3C7017C32FD4FE67C1E5E35DD21D395D44742B43BD1EF99BC8E9576845CDC087B923C69DB2D86680279253F2C8A450F97CC7D3BCD6E86FE4E70135D44B06"
-            signer: PublicAccount
-                address: Address {address: 'TB3XP4GQK6XH2SSA2E2U6UWCESNACK566DS4COY', networkType: 152}
-                publicKey: "A1BA266B56B21DC997D637BCC539CCFFA563ABCB34EAA52CF90005429F5CB39C"
-        1: AggregateTransactionCosignature
-            signature: "AD753E23D3D3A4150092C13A410D5AB373B871CA74D1A723798332D70AD4598EC656F580CB281DB3EB5B9A7A1826BAAA6E060EEA3CC5F93644136E9B52006C05"
-            signer: PublicAccount
-                address: Address {address: 'TBAFGZOCB7OHZCCYYV64F2IFZL7SOOXNDHFS5NY', networkType: 152}
-                publicKey: "B00721EDD76B24E3DDCA13555F86FC4BDA89D413625465B1BD7F347F74B82FF0"
-    deadline: Deadline {adjustedValue: 12619660047}
-  > innerTransactions: Array(1)
-      > 0: TransferTransaction
-            deadline: Deadline {adjustedValue: 12619660047}
-            maxFee: UInt64 {lower: 48000, higher: 0}
-            message: PlainMessage {type: 0, payload: 'test'}
-            mosaics: [Mosaic]
-            networkType: 152
-            payloadSize: undefined
-            recipientAddress: Address {address: 'TBXUTAX6O6EUVPB6X7OBNX6UUXBMPPAFX7KE5TQ', networkType: 152}
-            signature: "670EA8CFA4E35604DEE20877A6FC95C2786D748A8449CE7EEA7CB941FE5EC181175B0D6A08AF9E99955640C872DAD0AA68A37065C866EE1B651C3CE28BA95404"
-            signer: PublicAccount
-                address: Address {address: 'TCOMA5VG67TZH4X55HGZOXOFP7S232CYEQMOS7Q', networkType: 152}
-                publicKey: "4667BC99B68B6CA0878CD499CE89CDEB7AAE2EE8EB96E0E8656386DECF0AD657"
-            transactionInfo: AggregateTransactionInfo {height: UInt64, index: 0, id: '62600A8C0A21EB5CD28679A4', hash: undefined, merkleComponentHash: undefined, …}
-            type: 16724
-    maxFee: UInt64 {lower: 48000, higher: 0}
-    networkType: 152
-    payloadSize: 480
-    signature: "670EA8CFA4E35604DEE20877A6FC95C2786D748A8449CE7EEA7CB941FE5EC181175B0D6A08AF9E99955640C872DAD0AA68A37065C866EE1B651C3CE28BA95404"
-  > signer: PublicAccount
-        address: Address {address: 'TCV67BMTD2JMDQOJUDQHBFJHQPG4DAKVKST3YJI', networkType: 152}
-        publicKey: "FF9595FDCD983F46FF9AE0F7D86D94E9B164E385BD125202CF16528F53298656"
-  > transactionInfo: 
-        hash: "AA99F8F4000F989E6F135228829DB66AEB3B3C4B1F06BA77D373D042EAA4C8DA"
-        height: UInt64 {lower: 322376, higher: 0}
-        id: "62600A8C0A21EB5CD28679A3"
-        merkleComponentHash: "1FD6340BCFEEA138CC6305137566B0B1E98DEDE70E79CC933665FE93E10E0E3E"
-    type: 16705
+```cs
+> TxInfo: {
+  "meta": {
+    "height": "377165",
+    "hash": "EFCD8B70E854BDE519E6D576DF563BF22351338A6453EF87372072231140B674",
+    "merkleComponentHash": "92D6AE32B798F437930315643E33F50DA47D0D75DE6334715F72588E41CAA138",
+    "index": 1,
+    "timestamp": "14144733313",
+    "feeMultiplier": 100
+  },
+  "transaction": {
+    "size": 480,
+    "signature": "AD9385E7243EBB0ADD0DAD4A806FEA930A7310FD53554F93679C629011AF2B496DE3A986C7469C99DBA151A1CB8F1DF15EBDEA25D84CCAD36F345013D1EEBB04",
+    "signerPublicKey": "414CDBF3CAAE880CFD095E0AD8A87B56383C63BA4FDFC6980CFE9E4D82EFE121",
+    "version": 2,
+    "network": 152,
+    "type": 16705,
+    "maxFee": "48000",
+    "deadline": "14151912978",
+    "transactionsHash": "175EED761F28B8E3E053A44F374A0D97C4D3A27A558E6BC364FB38B7F31F5363",
+    "cosignatures": [
+      {
+        "version": "0",
+        "signerPublicKey": "561AA3785DB0545F375A8315C1F7F785FE2445D06FE6B83AC5D13B70E3CE5A4B",
+        "signature": "ACFBA8E408A7098A199AC6E14DF060C922E126EB4AB6B2C290C03B8EAFB5EC028363EA94D6BA4090D9F8D74BF78D997018B1DFB593A4AE7F6C84E5B179A04809"
+      },
+      {
+        "version": "0",
+        "signerPublicKey": "9025491143901E01CCE5C841E9883FC1C0DB00711CA56E9CD45BF2371E9E19D3",
+        "signature": "A4D902EF4249038F6C348E6BA4CC8BB44F7222CDADECCF7FC6D826DF797A102FAEA408CAB6DCA54526D67364AE16A6B50BECC888644451F2D59FA62D2E1A9908"
+      }
+    ],
+    "transactions": [
+      {
+        "meta": {
+          "height": "377165",
+          "aggregateHash": "EFCD8B70E854BDE519E6D576DF563BF22351338A6453EF87372072231140B674",
+          "aggregateId": "64380E01D7D26E76F92974A9",
+          "index": 0,
+          "timestamp": "14144733313",
+          "feeMultiplier": 100
+        },
+        "transaction": {
+          "signerPublicKey": "3120B9824211E91C596C98B4FA46E129FE26B2EAD259C5D4C90C41836D18E984",
+          "version": 1,
+          "network": 152,
+          "type": 16724,
+          "recipientAddress": "982982FFFC666CB09288FCB4B8F820E8B0B5F77093075AEF",
+          "message": "0074657374",
+          "mosaics": [
+            {
+              "id": "E74B99BA41F4AFEE",
+              "amount": "1000000"
+            }
+          ]
+        },
+        "id": "64380E01D7D26E76F92974AA"
+      }
+    ]
+  },
+  "id": "64380E01D7D26E76F92974A9"
+}
 ```
 
 - マルチシグアカウント
     - Bob
-        - AggregateTransaction.innerTransactions[0].signer.address
-            - TCOMA5VG67TZH4X55HGZOXOFP7S232CYEQMOS7Q
+        - transaction.transactions[0].transaction.signerPublicKey
+            - 3120B9824211E91C596C98B4FA46E129FE26B2EAD259C5D4C90C41836D18E984
 - 起案者アカウント
     - Carol1
-        - AggregateTransaction.signer.address
-            - TCV67BMTD2JMDQOJUDQHBFJHQPG4DAKVKST3YJI
+        - transaction.signerPublicKey
+            - 414CDBF3CAAE880CFD095E0AD8A87B56383C63BA4FDFC6980CFE9E4D82EFE121
 - 連署者アカウント
     - Carol2
-        - AggregateTransaction.cosignatures[0].signer.address
-            - TB3XP4GQK6XH2SSA2E2U6UWCESNACK566DS4COY
+        - transaction.cosignatures[0].signerPublicKey
+            - 561AA3785DB0545F375A8315C1F7F785FE2445D06FE6B83AC5D13B70E3CE5A4B
     - Carol3
-        - AggregateTransaction.cosignatures[1].signer.address
-            - TBAFGZOCB7OHZCCYYV64F2IFZL7SOOXNDHFS5NY
+        - transaction.cosignatures[1].signerPublicKey
+            - 9025491143901E01CCE5C841E9883FC1C0DB00711CA56E9CD45BF2371E9E19D3
 
 ## 9.5 マルチシグ構成変更
 
@@ -275,61 +414,112 @@ console.log(txInfo);
 連署者を減らすには除名対象アドレスに指定するとともに最小署名者数を連署者数が超えてしまわないように調整してトランザクションをアナウンスします。
 除名対象者を連署者に含む必要はありません。
 
-```js
-multisigTx = sym.MultisigAccountModificationTransaction.create(
-    undefined, 
-    -1, //承認のために必要な最小署名者数増分
-    -1, //除名のために必要な最小署名者数増分
-    [], //追加対象アドレス
-    [carol3.address],//除名対象アドレス
-    networkType
-);
+```cs
 
-aggregateTx = sym.AggregateTransaction.createComplete(
-    sym.Deadline.create(epochAdjustment),
-    [ //構成変更したいマルチシグアカウントの公開鍵を指定
-      multisigTx.toAggregate(bob.publicAccount),
-    ],
-    networkType,[]    
-).setMaxFeeForAggregate(100, 2); // 第二引数に連署者の数:2
+var multisigTx = new EmbeddedMultisigAccountModificationTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    MinApprovalDelta = 255, //承認のために必要な最小署名者数増分
+    MinRemovalDelta = 255, //除名のために必要な最小署名者数増分
+    AddressDeletions = new UnresolvedAddress[]
+    {
+        new (carol3Address.bytes)
+    }, //除名対象アドレス
+    SignerPublicKey = bobKeyPair.PublicKey, //構成変更したいマルチシグアカウントの公開鍵を指定
+};
 
-signedTx =  aggregateTx.signTransactionWithCosignatories(
-    carol1,
-    [carol2,carol4],
-    generationHash,
-);
-await txRepo.announce(signedTx).toPromise();
+var innerTransactions = new IBaseTransaction[] {multisigTx};
+var merkleHash = SymbolFacade.HashEmbeddedTransactions(innerTransactions);
+
+var aggregateTx = new AggregateCompleteTransactionV2() {
+    Network = NetworkType.TESTNET,
+    Transactions = 	innerTransactions,
+    SignerPublicKey = carol1KeyPair.PublicKey,
+    TransactionsHash = merkleHash,
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp),
+};
+TransactionHelper.SetMaxFee(aggregateTx, 100, 2/*連署者の数*/);
+
+//署名
+var carol1Signature = facade.SignTransaction(carol1KeyPair, aggregateTx);
+TransactionsFactory.AttachSignature(aggregateTx, carol1Signature);
+
+var hash = facade.HashTransaction(aggregateTx);
+Console.WriteLine(hash);
+
+var cosignature1 = new Cosignature
+{
+    Signature = carol2KeyPair.Sign(hash.bytes),
+    SignerPublicKey = carol2KeyPair.PublicKey
+};//連署者による署名
+var cosignature2 = new Cosignature
+{
+    Signature = carol4KeyPair.Sign(hash.bytes),
+    SignerPublicKey = carol4KeyPair.PublicKey
+};//連署者による署名
+aggregateTx.Cosignatures = new [] {cosignature1, cosignature2};
+
+var payload = TransactionsFactory.CreatePayload(aggregateTx);
+var result = await Announce(payload);
+Console.WriteLine(result);
 ```
+
+※MinApprovalDelta,MinRemovalDeltaはbyte型です。byte型で-1を表すには最大値（255）を使って表現することができます。同じく-2は254です。
 
 ### 連署者構成の差替え
 
 連署者を差し替えるには、追加対象アドレスと除名対象アドレスを指定します。
 新たに追加指定するアカウントの連署は必ず必要です。
 
-```js
-multisigTx = sym.MultisigAccountModificationTransaction.create(
-    undefined, 
-    0, //承認のために必要な最小署名者数増分
-    0, //除名のために必要な最小署名者数増分
-    [carol5.address], //追加対象アドレス
-    [carol4.address], //除名対象アドレス
-    networkType
-);
+```cs
+var multisigTx = new EmbeddedMultisigAccountModificationTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    AddressAdditions = new UnresolvedAddress[]
+    {
+        new (carol5Address.bytes)  
+    }, //追加対象アドレス
+    AddressDeletions = new UnresolvedAddress[]
+    {
+        new (carol4Address.bytes)
+    }, //除名対象アドレス
+    SignerPublicKey = bobKeyPair.PublicKey, //構成変更したいマルチシグアカウントの公開鍵を指定
+};　// 承認、除名共に人数の増減はないため、MinApprovalDelta, MinRemovalDeltaは不要
 
-aggregateTx = sym.AggregateTransaction.createComplete(
-    sym.Deadline.create(epochAdjustment),
-    [ //構成変更したいマルチシグアカウントの公開鍵を指定
-      multisigTx.toAggregate(bob.publicAccount),
-    ],
-    networkType,[]    
-).setMaxFeeForAggregate(100, 2); // 第二引数に連署者の数:2
+var innerTransactions = new IBaseTransaction[] {multisigTx};
+var merkleHash = SymbolFacade.HashEmbeddedTransactions(innerTransactions);
 
-signedTx =  aggregateTx.signTransactionWithCosignatories(
-    carol1, //起案者
-    [carol2,carol5], //連署者+承諾アカウント
-    generationHash,
-);
-await txRepo.announce(signedTx).toPromise();
+var aggregateTx = new AggregateCompleteTransactionV2() {
+    Network = NetworkType.TESTNET,
+    Transactions = 	innerTransactions,
+    SignerPublicKey = carol1KeyPair.PublicKey,
+    TransactionsHash = merkleHash,
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp),
+};
+TransactionHelper.SetMaxFee(aggregateTx, 100, 2/*連署者の数*/);
+
+//署名
+var carol1Signature = facade.SignTransaction(carol1KeyPair, aggregateTx); //起案者による署名
+TransactionsFactory.AttachSignature(aggregateTx, carol1Signature);
+
+var hash = facade.HashTransaction(aggregateTx);
+Console.WriteLine(hash);
+
+var cosignature1 = new Cosignature
+{
+    Signature = carol2KeyPair.Sign(hash.bytes),
+    SignerPublicKey = carol2KeyPair.PublicKey
+};//連署者による署名
+var cosignature2 = new Cosignature
+{
+    Signature = carol5KeyPair.Sign(hash.bytes),
+    SignerPublicKey = carol5KeyPair.PublicKey
+}; //承諾アカウントによる署名
+aggregateTx.Cosignatures = new [] {cosignature1, cosignature2};
+
+var payload = TransactionsFactory.CreatePayload(aggregateTx);
+var result = await Announce(payload);
+Console.WriteLine(result);
 ```
 
 ## 9.6 現場で使えるヒント

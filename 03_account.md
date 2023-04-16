@@ -1,36 +1,24 @@
-# 3.アカウント
+# 3.キーペア
 
-アカウントは秘密鍵に紐づく情報が記録されたデータ構造体です。アカウントと関連づいた秘密鍵を使って署名することでのみブロックチェーンのデータを更新することができます。  
+キーペアは秘密鍵と公開鍵のペアで公開鍵を定められた形式でコンバートした物がアドレスとなります。秘密鍵を使って署名することでのみブロックチェーンのデータを更新することができます。  
 
-## 3.1 アカウント生成
-
-アカウントには秘密鍵と公開鍵をセットにしたキーペア、アドレスなどの情報が含まれています。まずはランダムにアカウントを作成して、それらの情報を確認してみましょう。  
+## 3.1 キーペア生成
+まずは秘密鍵を作成して、秘密鍵に基づいた公開鍵を作成しましょう。  
 
 ### 新規生成
-```js
-alice = sym.Account.generateNewAccount(networkType);
-console.log(alice);
+```cs
+var aliceKeyPair = KeyPair.GenerateNewKeyPair();
+var alicePrivateKey = aliceKeyPair.PrivateKey;
+var alicePublicKey = aliceKeyPair.PublicKey;
+Console.WriteLine($"alicePrivateKey: {alicePrivateKey}");
+Console.WriteLine($"alicePublicKey: {alicePublicKey}");
 ```
+鍵はそれぞれbyte[]ですがコンソールに出力する際は16進数文字列にて出力します。
+
 ###### 出力例
-```js
-> Account
-    address: Address {address: 'TBXUTAX6O6EUVPB6X7OBNX6UUXBMPPAFX7KE5TQ', networkType: 152}
-    keyPair: {privateKey: Uint8Array(32), publicKey: Uint8Array(32)}
 ```
-
-networkTypeは以下の通りです。
-```js
-{104: 'MAIN_NET', 152: 'TEST_NET'}
-```
-
-### 秘密鍵と公開鍵の導出
-```js
-console.log(alice.privateKey);
-console.log(alice.publicKey);
-```
-```
-> 1E9139CC1580B4AED6A1FE110085281D4982ED0D89CE07F3380EB83069B1****
-> D4933FC1E4C56F9DF9314E9E0533173E1AB727BDB2A04B59F048124E93BEFBD2
+> alicePrivateKey: 14311B7BEC946A28AD845FA8B565B90F52B6E0562FCC2D779D46FEB3A234****
+> alicePublicKey: 5EDD03AA17FC3EF57F02271A979A0B30B6F350615DDDDC54D5F9DF3CD2690F04
 ```
 
 #### 注意事項
@@ -39,52 +27,19 @@ console.log(alice.publicKey);
 
 
 ### アドレスの導出
-```js
-aliceRawAddress = alice.address.plain();
-console.log(aliceRawAddress);
+```cs
+var aliceAddress = facade.Network.PublicKeyToAddress(alicePublicKey);
+Console.WriteLine($"aliceAddress: {aliceAddress}");
 ```
-```js
-> TBXUTAX6O6EUVPB6X7OBNX6UUXBMPPAFX7KE5TQ
-```
-
-これらがブロックチェーンを操作するための最も基本的な情報となります。また、秘密鍵からアカウントを生成したり、公開鍵やアドレスのみを扱うクラスの生成方法も確認しておきましょう。  
-
-### 秘密鍵からアカウント生成
-```js
-alice = sym.Account.createFromPrivateKey(
-  "1E9139CC1580B4AED6A1FE110085281D4982ED0D89CE07F3380EB83069B1****",
-  networkType
-);
+```cs
+> aliceAddress: TC3YSUYEZLW66IGQ7SIDT4DVYYUKT6OMWHAYYYQ
 ```
 
-### 公開鍵クラスの生成
-```js
-alicePublicAccount = sym.PublicAccount.createFromPublicKey(
-  "D4933FC1E4C56F9DF9314E9E0533173E1AB727BDB2A04B59F048124E93BEFBD2",
-  networkType
-);
-console.log(alicePublicAccount);
-```
-###### 出力例
-```js
-> PublicAccount
-    address: Address {address: 'TBXUTAX6O6EUVPB6X7OBNX6UUXBMPPAFX7KE5TQ', networkType: 152}
-    publicKey: "D4933FC1E4C56F9DF9314E9E0533173E1AB727BDB2A04B59F048124E93BEFBD2"
+これらがブロックチェーンを操作するための最も基本的な情報となります。また、既存の秘密鍵からキーペアを生成する方法は以下となります。
 
-```
-
-### アドレスクラスの生成
-```js
-aliceAddress = sym.Address.createFromRawAddress(
-  "TBXUTAX6O6EUVPB6X7OBNX6UUXBMPPAFX7KE5TQ"
-);
-console.log(aliceAddress);
-```
-###### 出力例
-```js
-> Address
-    address: "TBXUTAX6O6EUVPB6X7OBNX6UUXBMPPAFX7KE5TQ"
-    networkType: 152
+### 秘密鍵からキーペア生成
+```cs
+var alicePrivateKey = new PrivateKey("14311B7BEC946A28AD845FA8B565B90F52B6E0562FCC2D779D46FEB3A234****");
 ```
 
 ## 3.2 アカウントへの送信
@@ -126,95 +81,181 @@ Symbolブロックチェーンでは、この手数料をXYMという共通ト�
 
 ### 所有モザイク一覧の取得
 
-```js
-accountRepo = repo.createAccountRepository();
-accountInfo = await accountRepo.getAccountInfo(aliceAddress).toPromise();
-console.log(accountInfo);
+ノードに保存されている情報を取得するにはREST APIから特定のエンドポイントにアクセスし取得します。
+
+今後、REST APIからデータを取得することが多くなります。以下のような関数を用意しいつでも利用できるようにしておくと便利です。なお、UnityでWebGLビルドの場合はHttpClientが使えないようなのでUnityWebRequestなどに置き換えて利用してください
+
+```cs
+static async Task<string> GetDataFromApi(string _node, string _param)
+{
+    var url = $"{_node}{_param}";
+    using var client = new HttpClient();
+    try
+    {
+        var response = await client.GetAsync(url);
+
+        if (response.IsSuccessStatusCode) {
+            return await response.Content.ReadAsStringAsync();
+        }
+        throw new Exception($"Error: {response.StatusCode}");
+    }
+    catch (Exception ex) {
+        throw new Exception(ex.Message);
+    }
+}
+
+static async Task<string> PostDataFromApi(string _node, string _param, object _obj)
+{
+    var url = $"{_node}{_param}";
+    using var client = new HttpClient();
+    try
+    {
+        var json = JsonSerializer.Serialize(_obj);
+        var data = new StringContent(json, Encoding.UTF8, "application/json");
+        var response = await client.PostAsync(url, data);
+
+        if (response.IsSuccessStatusCode) {
+            return await response.Content.ReadAsStringAsync();
+        }
+        throw new Exception($"Error: {response.StatusCode}");
+    }
+    catch (Exception ex) {
+        throw new Exception(ex.Message);
+    }
+}
+```
+
+取得できるデータは文字列で返ってくるので、取得したい情報に関するクラスを事前に作成する必要があります。
+
+今回はアカウントが所有するモザイク一覧を取得するため以下エンドポイントを叩きます。<br>
+https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Account-routes/operation/getAccountInfo
+
+ここのレスポンスの箇所に合わせてクラスを作成します。
+※以下ではJsonをデシリアライズするためのクラスを作成しますが、本書ではこれ以降はAPIから取得するJSONを`System.Text.Json.Nodes.JsonNode.Parse()`によってデシリアライズします。
+Symbolとは関係の無いところになりますので各自、Newtonsoft.Jsonを使用するなどご自身のアプリケーションや環境に合わせてご利用ください。
+同様にNullチェックなども適切に処理してください（本書では端折ります）
+```cs
+namespace AccountApi
+{
+    public class Account
+    {
+        public int version { get; set; }
+        public string address { get; set; }
+        public string addressHeight { get; set; }
+        public string publicKey { get; set; }
+        public string publicKeyHeight { get; set; }
+        public int accountType { get; set; }
+        public SupplementalPublicKeys supplementalPublicKeys { get; set; }
+        public List<object> activityBuckets { get; set; }
+        public List<Mosaic> mosaics { get; set; }
+        public string importance { get; set; }
+        public string importanceHeight { get; set; }
+    }
+
+    public class Mosaic
+    {
+        public string id { get; set; }
+        public string amount { get; set; }
+    }
+
+    public class SupplementalPublicKeys
+    {
+    }
+
+    public class AccountRoot
+    {
+        public Account account { get; set; }
+        public string id { get; set; }
+    }   
+}
+```
+
+
+```cs
+var param = $"/accounts/{aliceAddress}";
+var account = JsonSerializer.Deserialize<AccountApi.AccountRoot>(await GetDataFromApi(node, param));
+if (account == null) throw new NullReferenceException("account is null");
+foreach (var mosaic in account.account.mosaics)
+    Console.WriteLine($"{mosaic.id} : {mosaic.amount}");
 ```
 ###### 出力例
-```js
-> AccountInfo
-    address: Address {address: 'TBXUTAX6O6EUVPB6X7OBNX6UUXBMPPAFX7KE5TQ', networkType: 152}
-    publicKey: "0000000000000000000000000000000000000000000000000000000000000000"
-  > mosaics: Array(1)
-      0: Mosaic
-        amount: UInt64 {lower: 10000000, higher: 0}
-        id: MosaicId
-          id: Id {lower: 760461000, higher: 981735131}
+```cs
+> 72C0212E67A08BCE : 1068026343
+> 00EC51045EECD5EB : 1
+> 173AC1E38CBAD11D : 499999997
 ```
 
-#### publicKey
-クライアント側で作成しただけで、ブロックチェーンでまだ利用されていないアカウント情報は記録されていません。宛先として指定されて受信することで初めてアカウント情報が記録され、署名したトランザクションを送信することで公開鍵の情報が記録されます。そのため、publicKeyは現在`00000...`表記となっています。
+※nodeから取得するアドレスは16進数表記です。これをNやTから始まるアドレスに変換するには以下で可能です。
+```cs
+Console.WriteLine(Converter.AddressToString(Converter.HexToBytes("982982FFFC666CB09288FCB4B8F820E8B0B5F77093075AEF")));
 
-#### UInt64
-JavaScriptでは大きすぎる数値はあふれてしまうため、idやamountはUInt64というsdkの独自フォーマットで管理されています。文字列に変換する場合は toString()、数値に変換する場合は compact()、16進数にする場合は toHex() で変換してください。
-
-```js
-console.log("addressHeight:"); //アドレスが記録されたブロック高
-console.log(accountInfo.addressHeight.compact()); //数値
-accountInfo.mosaics.forEach(mosaic => {
-  console.log("id:" + mosaic.id.toHex()); //16進数
-  console.log("amount:" + mosaic.amount.toString()); //文字列
-});
+> TAUYF774MZWLBEUI7S2LR6BA5CYLL53QSMDVV3Y
 ```
-
-大きすぎるid値をcompactで数値変換するとエラーが発生することがあります。  
-`Compacted value is greater than Number.Max_Value.`
-
 
 #### 表示桁数の調整
 
 所有するトークンの量は誤差の発生を防ぐため、整数値で扱います。トークンの定義から可分性を取得することができるので、その値を使って正確な所有量を表示してみます。  
 
-```js
-mosaicRepo = repo.createMosaicRepository();
-mosaicAmount = accountInfo.mosaics[0].amount.toString();
-mosaicInfo = await mosaicRepo.getMosaic(accountInfo.mosaics[0].id).toPromise();
-divisibility = mosaicInfo.divisibility; //可分性
-if(divisibility > 0){
-  displayAmount = mosaicAmount.slice(0,mosaicAmount.length-divisibility)  
-  + "." + mosaicAmount.slice(-divisibility);
-}else{
-  displayAmount = mosaicAmount;
-}
-console.log(displayAmount);
-```
+```cs
+using System.Text.Json.Nodes;
 
+foreach (var mosaic in account.account.mosaics)
+{
+    var mParam = $"/mosaics/{mosaic.id}";
+    var m = JsonNode.Parse(await GetDataFromApi(node, mParam));
+    var divisibility = (int)m["mosaic"]["divisibility"];
+    var displayAmount = "";
+    displayAmount = divisibility > 0 ? (double.Parse(mosaic.amount) / MathF.Pow(10, divisibility)).ToString(CultureInfo.InvariantCulture) : mosaic.amount;
+    Console.WriteLine($"{mosaic.id} : {displayAmount}");
+}
+```
+###### 出力例
+```cs
+> 72C0212E67A08BCE : 1068.026343
+> 00EC51045EECD5EB : 1
+> 173AC1E38CBAD11D : 499999997
+```
 ## 3.4 現場で使えるヒント
 ### 暗号化と署名
 
 アカウントとして生成した秘密鍵や公開鍵は、そのまま従来の暗号化や電子署名として活用することができます。信頼性に問題点があるアプリケーションを使用する必要がある場合も、個人間（エンドツーエンド）でデータの秘匿性・正当性を検証することができます。  
 
 #### 事前準備：対話のためのBobアカウントを生成
-```js
-bob = sym.Account.generateNewAccount(networkType);
-bobPublicAccount = bob.publicAccount;
+```cs
+var bobKeyPair = KeyPair.GenerateNewKeyPair();
+var bobPublicKey = bobKeyPair.PublicKey;
+```
+
+以降の章でもBobアカウントを多用しますので秘密鍵を保存して復元可能な状態にしておきましょう。
+また、手数料のために多少のXYMをFaucetから取得しておきます。
+
+```cs
+Console.WriteLine(bobKeyPair.PrivateKey);
+var bobAddress = facade.Network.PublicKeyToAddress(bobPublicKey);
+Console.WriteLine("https://testnet.symbol.tools/?recipient=" + bobAddress +"&amount=10");
 ```
 
 #### 暗号化
 
 Aliceの秘密鍵・Bobの公開鍵で暗号化し、Aliceの公開鍵・Bobの秘密鍵で復号します（AES-GCM形式）。
 
-```js
-message = 'Hello Symol!';
-encryptedMessage = alice.encryptMessage(message ,bob.publicAccount);
-console.log(encryptedMessage);
+```cs
+using CatSdk.Crypto;
+
+const string message = "Hello Symol!";
+var encryptedMessage = Crypto.Encode(alicePrivateKey, bobPublicKey, message);
+Console.WriteLine(encryptedMessage);
 ```
-```js
-> 294C8979156C0D941270BAC191F7C689E93371EDBC36ADD8B920CF494012A97BA2D1A3759F9A6D55D5957E9D
+```cs
+> A6FC9E7A678768E8CBB38871FBA2D758A02B9904CC364DD5B19CD4289D4EBF8DF722025293980AD0
 ```
 
-#### 復号化
-```js
-decryptMessage = bob.decryptMessage(
-  new sym.EncryptedMessage(
-    "294C8979156C0D941270BAC191F7C689E93371EDBC36ADD8B920CF494012A97BA2D1A3759F9A6D55D5957E9D"
-  ),
-  alice.publicAccount
-).payload
-console.log(decryptMessage);
+#### 復号
+```cs
+var decryptedMessage = Crypto.Decode(bobPrivateKey, alicePublicKey, "A6FC9E7A678768E8CBB38871FBA2D758A02B9904CC364DD5B19CD4289D4EBF8DF722025293980AD0");
+Console.WriteLine(decryptedMessage);
 ```
-```js
+```cs
 > "Hello Symol!"
 ```
 
@@ -222,27 +263,23 @@ console.log(decryptMessage);
 
 Aliceの秘密鍵でメッセージを署名し、Aliceの公開鍵と署名でメッセージを検証します。
 
-```js
-Buffer = require("/node_modules/buffer").Buffer;
-payload = Buffer.from("Hello Symol!", 'utf-8');
-signature = Buffer.from(sym.KeyPair.sign(alice.keyPair, payload)).toString("hex").toUpperCase();
-console.log(signature);
+```cs
+const string message = "Hello Symol!";
+var sig = aliceKeyPair.Sign(message);
+Console.WriteLine($"Signature: {sig}");
 ```
-```
-> B8A9BCDE9246BB5780A8DED0F4D5DFC80020BBB7360B863EC1F9C62CAFA8686049F39A9F403CB4E66104754A6AEDEF8F6B4AC79E9416DEEDC176FDD24AFEC60E
+```cs
+> Signature: 07CDC49A2D132BFE24FFC11F1DCEF288356A2588B074DBCA4DC09853A5D5B6139381A12C8D161C5F00D10A6F38B8DC67377F27C9293B6665ED164DA54F41DC01
 ```
 
 #### 検証
-```js
-isVerified = sym.KeyPair.verify(
-  alice.keyPair.publicKey,
-  Buffer.from("Hello Symol!", 'utf-8'),
-  Buffer.from(signature, 'hex')
-)
-console.log(isVerified);
+```cs
+var verifier = new Verifier(alicePublicKey);
+var verify = verifier.Verify(message, sig);
+Console.WriteLine($"Verify: {verify}");
 ```
-```js
-> true
+```cs
+> Verify: True
 ```
 
 ブロックチェーンを使用しない署名は何度も再利用される可能性があることにご注意ください。
@@ -250,48 +287,33 @@ console.log(isVerified);
 ### アカウントの保管
 
 アカウントの管理方法について説明しておきます。  
-秘密鍵はそのままで保存しないようにしてください。symbol-qr-libraryを利用して秘密鍵をパスフレーズで暗号化して保存する方法を紹介します。  
+秘密鍵はそのままで保存しないようにしてください。Aes方式による暗号化を利用して秘密鍵をパスフレーズで暗号化して保存する方法を紹介します。
 
 #### 秘密鍵の暗号化
 
-```js
-qr = require("/node_modules/symbol-qr-library");
-
-//パスフレーズでロックされたアカウント生成
-signerQR = qr.QRCodeGenerator.createExportAccount(
-  alice.privateKey, networkType, generationHash, "パスフレーズ"
-);
-
-//QRコード表示
-signerQR.toBase64().subscribe(x =>{
-
-  //HTML body上にQRコードを表示する例
-  (tag= document.createElement('img')).src = x;
-  document.getElementsByTagName('body')[0].appendChild(tag);
-});
-
-//アカウントを暗号化したJSONデータとして表示
-jsonSignerQR = signerQR.toJSON();
-console.log(jsonSignerQR);
+```cs
+using CatSdk.Crypto;
+var salt = Converter.BytesToHex(Crypto.RandomBytes(32));
+var ciphertext = Crypto.EncryptString(alicePrivateKey.ToString(), "パスフレーズ", salt);
+Console.WriteLine($"salt: {salt}");
+Console.WriteLine($"ciphertext: {ciphertext}");
 ```
 ###### 出力例
-```js
-> {"v":3,"type":2,"network_id":152,"chain_id":"7FCCD304802016BEBBCD342A332F91FF1F3BB5E902988B352697BE245F48E836","data":{"ciphertext":"e9e2f76cb482fd054bc13b7ca7c9d086E7VxeGS/N8n1WGTc5MwshNMxUiOpSV2CNagtc6dDZ7rVZcnHXrrESS06CtDTLdD7qrNZEZAi166ucDUgk4Yst0P/XJfesCpXRxlzzNgcK8Q=","salt":"54de9318a44cc8990e01baba1bcb92fa111d5bcc0b02ffc6544d2816989dc0e9"}}
+```cs
+> salt: 491258AA0CB6096CB9BCF31EDC8068066AC923D0EDDBAEE422BCEC7EECD4B126
+> ciphertext: LAgaS3g8QueyJImgKbruALW/pi3k5Y6+rwFkwEdCwXtQxCDPUVK5LOWaprcXLdLcLDfx646l+PY5vS678kVwlFfX+w1i+3kd4YQM0pyK/fQ=
 ```
-このjsonSignerQRで出力されるQRコード、あるいはテキストを保存しておけばいつでも秘密鍵を復元することができます。
+saltはこの例ではランダムな文字列ですが端末固有のキーなど固定値で無ければ良いと思います。
+このsaltとパスフレーズがあれば復号が可能です。
 
 #### 暗号化された秘密鍵の復号
 
-```js
-//保存しておいたテキスト、あるいはQRコードスキャンで得られたテキストをjsonSignerQRに代入
-jsonSignerQR = '{"v":3,"type":2,"network_id":152,"chain_id":"7FCCD304802016BEBBCD342A332F91FF1F3BB5E902988B352697BE245F48E836","data":{"ciphertext":"e9e2f76cb482fd054bc13b7ca7c9d086E7VxeGS/N8n1WGTc5MwshNMxUiOpSV2CNagtc6dDZ7rVZcnHXrrESS06CtDTLdD7qrNZEZAi166ucDUgk4Yst0P/XJfesCpXRxlzzNgcK8Q=","salt":"54de9318a44cc8990e01baba1bcb92fa111d5bcc0b02ffc6544d2816989dc0e9"}}';
-
-qr = require("/node_modules/symbol-qr-library");
-signerQR = qr.AccountQR.fromJSON(jsonSignerQR,"パスフレーズ");
-console.log(signerQR.accountPrivateKey);
+```cs
+var decryptString = Crypto.DecryptString("LAgaS3g8QueyJImgKbruALW/pi3k5Y6+rwFkwEdCwXtQxCDPUVK5LOWaprcXLdLcLDfx646l+PY5vS678kVwlFfX+w1i+3kd4YQM0pyK/fQ=", "パスフレーズ", "491258AA0CB6096CB9BCF31EDC8068066AC923D0EDDBAEE422BCEC7EECD4B126");
+Console.WriteLine(decryptString);
 ```
 ###### 出力例
-```js
-> 1E9139CC1580B4AED6A1FE110085281D4982ED0D89CE07F3380EB83069B1****
+```cs
+> 5DB8324E7EB83E7665D500B014283260EF312139034E86DFB7EE736503EA****
 ```
 

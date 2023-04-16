@@ -11,94 +11,163 @@ Symbolブロックチェーンにはハッシュロックとシークレット�
 
 ### アグリゲートボンデッドトランザクションの作成
 
-```js
-bob = sym.Account.generateNewAccount(networkType);
+```cs
+var bobPublicKey = new PublicKey(Converter.HexToBytes("4C4BD7F8E1E1AC61DB817089F9416A7EDC18339F06CDC851495B271533FAD13B"));
+var bobAddress = facade.Network.PublicKeyToAddress(bobPublicKey);
 
-tx1 = sym.TransferTransaction.create(
-    undefined,
-    bob.address,  //Bobへの送信
-    [ //1XYM
-      new sym.Mosaic(
-        new sym.NamespaceId("symbol.xym"),
-        sym.UInt64.fromUint(1000000)
-      )
-    ],
-    sym.EmptyMessage, //メッセージ無し
-    networkType
-);
+var namespaceId = IdGenerator.GenerateNamespaceId("symbol.xym");
 
-tx2 = sym.TransferTransaction.create(
-    undefined,
-    alice.address,  // Aliceへの送信
-    [],
-    sym.PlainMessage.create('thank you!'), //メッセージ
-    networkType
-);
+var tx1 = new EmbeddedTransferTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    RecipientAddress = new UnresolvedAddress(bobAddress.bytes),  //Bobへの送信
+    SignerPublicKey = alicePublicKey,
+    Mosaics = new [] //1XYM
+    {
+        new UnresolvedMosaic()
+        {
+            MosaicId = new UnresolvedMosaicId(namespaceId),
+            Amount = new Amount(1000000)
+        }
+    },
+    //メッセージ無し
+};
+var tx2 = new EmbeddedTransferTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    RecipientAddress = new UnresolvedAddress(aliceAddress.bytes), // Aliceへの送信
+    SignerPublicKey = bobPublicKey,
+    Message = Converter.Utf8ToPlainMessage("thank you!") //メッセージ
+};
 
-aggregateArray = [
-    tx1.toAggregate(alice.publicAccount), //Aliceからの送信
-    tx2.toAggregate(bob.publicAccount), // Bobからの送信
-]
+var innerTransactions = new IBaseTransaction[] {tx1, tx2};
+var merkleHash = SymbolFacade.HashEmbeddedTransactions(innerTransactions);
 
-//アグリゲートボンデッドトランザクション
-aggregateTx = sym.AggregateTransaction.createBonded(
-    sym.Deadline.create(epochAdjustment),
-    aggregateArray,
-    networkType,
-    [],
-).setMaxFeeForAggregate(100, 1);
+var aggregateTx = new AggregateBondedTransactionV2() {
+    Network = NetworkType.TESTNET,
+    Transactions = 	innerTransactions,
+    SignerPublicKey = aliceKeyPair.PublicKey,
+    TransactionsHash = merkleHash,
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp),
+};
+TransactionHelper.SetMaxFee(aggregateTx, 100, 2/*連署者の数*/);
 
 //署名
-signedAggregateTx = alice.sign(aggregateTx, generationHash);
+var aliceSignature = facade.SignTransaction(aliceKeyPair, aggregateTx);
 ```
+tx1,tx2の2つのトランザクション作成する際に送信元アカウントの公開鍵を`SignerPublicKey`に指定します。公開鍵はアカウントの章を参考に事前にAPIで取得しておきましょう。
 
-tx1,tx2の2つのトランザクションをaggregateArrayで配列にする時に、送信元アカウントの公開鍵を指定します。
-公開鍵はアカウントの章を参考に事前にAPIで取得しておきましょう。
 配列化されたトランザクションはブロック承認時にその順序で整合性を検証されます。
 例えば、tx1でNFTをAliceからBobへ送信した後、tx2でBobからCarolへ同じNFTを送信することは可能ですが、tx2,tx1の順序でアグリゲートトランザクションを通知するとエラーになります。
 また、アグリゲートトランザクションの中に1つでも整合性の合わないトランザクションが存在していると、アグリゲートトランザクション全体がエラーとなってチェーンに承認されることはありません。
 
+またハッシュロックトランザクション承認後payloadを指定してボンデッドトランザクションをアナウンスします。そのためボンデッドトランザクション構築時にペイロードを保管するようにします。
+
+後ほどBobは連署するためにアグリゲートトランザクションのハッシュが必要になりますので、それもコンソールに出力し保存しておきます。
+
+```cs
+// Bonded用payload作成
+var payloadBonded = TransactionsFactory.AttachSignature(aggregateTx, aliceSignature);
+Console.WriteLine(payloadBonded);
+
+var hash = facade.HashTransaction(aggregateTx);
+Console.WriteLine(hash);
+```
+
 ### ハッシュロックトランザクションの作成と署名、アナウンス
-```js
+```cs
+
 //ハッシュロックTX作成
-hashLockTx = sym.HashLockTransaction.create(
-  sym.Deadline.create(epochAdjustment),
-    new sym.Mosaic(new sym.NamespaceId("symbol.xym"),sym.UInt64.fromUint(10 * 1000000)), //10xym固定値
-    sym.UInt64.fromUint(480), // ロック有効期限
-    signedAggregateTx,// このハッシュ値を登録
-    networkType
-).setMaxFee(100);
+var hashLockTx = new HashLockTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    SignerPublicKey = aliceKeyPair.PublicKey,
+    Mosaic = new UnresolvedMosaic() //10xym固定値
+    {
+        MosaicId = new UnresolvedMosaicId(namespaceId),
+        Amount = new Amount(10 * 1000000)
+    },
+    Duration = new BlockDuration(480), // ロック有効期限
+    Hash = hash, // このハッシュ値を登録
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp),
+};
+TransactionHelper.SetMaxFee(hashLockTx, 100);
 
 //署名
-signedLockTx = alice.sign(hashLockTx, generationHash);
+var signature = facade.SignTransaction(aliceKeyPair, hashLockTx);
+var payload = TransactionsFactory.AttachSignature(hashLockTx, signature);
 
 //ハッシュロックTXをアナウンス
-await txRepo.announce(signedLockTx).toPromise();
+var result = await Announce(payload);
+Console.WriteLine(result);
 ```
 
 ### アグリゲートボンデッドトランザクションのアナウンス
 
-エクスプローラーなどで確認した後、ボンデッドトランザクションをネットワークにアナウンスします。
-```js
-await txRepo.announceAggregateBonded(signedAggregateTx).toPromise();
+アグリゲートボンデッドトランザクションは通常のトランザクションとはアナウンス先が異なります。以下のような関数を用意しておくと良いでしょう。<br>
+https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Transaction-routes/operation/announcePartialTransaction
+
+```cs
+static async Task<string> AnnounceBonded(string payload)
+{
+    using var client = new HttpClient();
+    var content = new StringContent(payload, Encoding.UTF8, "application/json");
+    var response =  client.PutAsync(node + "/transactions/partial", content).Result;
+    return await response.Content.ReadAsStringAsync();
+}
 ```
 
+エクスプローラーなどで確認した後、ボンデッドトランザクションをネットワークにアナウンスします。
+```cs
+var resultBonded = await AnnounceBonded(payloadBonded);
+Console.WriteLine(resultBonded);
+```
 
 ### 連署
-ロックされたトランザクションを指定されたアカウント(Bob)で連署します。
+ロックされたトランザクションを指定されたアカウント(Bob)で連署します。<br>
+https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Transaction-routes/operation/announceCosignatureTransaction
 
-```js
-txInfo = await txRepo.getTransaction(signedAggregateTx.hash,sym.TransactionGroup.Partial).toPromise();
-cosignatureTx = sym.CosignatureTransaction.create(txInfo);
-signedCosTx = bob.signCosignatureTransaction(cosignatureTx);
-await txRepo.announceAggregateBondedCosignature(signedCosTx).toPromise();
+連署のトランザクションもアナウンス先が異なります。以下のような関数を用意しておくなど対応してください。
+
+```cs
+static async Task<string> AnnounceCosignature(string data)
+{
+    using var client = new HttpClient();
+    var content = new StringContent(data, Encoding.UTF8, "application/json");
+    var response =  client.PutAsync(node + "/transactions/cosignature", content).Result;
+    return await response.Content.ReadAsStringAsync();
+}
+```
+
+事前に保存しておいたハッシュに対して署名し連署トランザクションをアナウンスします。
+```cs
+const string hash = "111194F4FEC35A27F91BBAD2F37E2AAFE037F77A2D503B8D0DE402F2AD4017D3";
+var data = new Dictionary<string, string>()
+{
+    {"parentHash", hash},
+    {"signature", bobKeyPair.Sign(hash).ToString()},
+    {"signerPublicKey", bobPublicKey.ToString()},
+    {"version", "0"}
+};
+var json = JsonSerializer.Serialize(data);
+var result = await AnnounceCosignature(json);
+Console.WriteLine(result);
+```
+
+なお、以下のように特定のアカウントに対して連署を要求するトランザクションが存在しているか確認することも可能です。<br>
+https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Transaction-routes/operation/searchPartialTransactions
+
+```cs
+var param = $"/transactions/partial?address={bobAddress}";
+var jsonString = await GetDataFromApi(node, param);
+var partial = JsonNode.Parse(jsonString);
+Console.WriteLine(partial);
 ```
 
 ### 注意点
 ハッシュロックトランザクションは起案者(トランザクションを作成し最初に署名するアカウント)に限らず、誰が作成してアナウンスしても大丈夫ですが、
 アグリゲートトランザクションにそのアカウントがsignerとなるトランザクションを含めるようにしてください。
 モザイク送信無し＆メッセージ無しのダミートランザクションでも問題ありません（パフォーマンスに影響が出るための仕様とのことです）
-
 
 ## 8.2 シークレットロック・シークレットプルーフ
 
@@ -107,73 +176,66 @@ await txRepo.announceAggregateBondedCosignature(signedCosTx).toPromise();
 
 ここではAliceが1XYMをロックしてBobが解除することで受信する方法を説明します。
 
-まずはAliceとやり取りするBobアカウントを作成します。
-ロック解除にBob側からトランザクションをアナウンスする必要があるのでFAUCETで10XYMほど受信しておきます。
-
-```js
-bob = sym.Account.generateNewAccount(networkType);
-console.log(bob.address);
-
-//FAUCET URL出力
-console.log("https://testnet.symbol.tools/?recipient=" + bob.address.plain() +"&amount=10");
-```
-
 ### シークレットロック
 
+ロック・解除にかかわる共通暗号を作成します。今回はSHA3_256というハッシュアルゴリズムで作成します。
+
 ロック・解除にかかわる共通暗号を作成します。
-
-```js
-sha3_256 = require('/node_modules/js-sha3').sha3_256;
-
-random = sym.Crypto.randomBytes(20);
-hash = sha3_256.create();
-secret = hash.update(random).hex(); //ロック用キーワード
-proof = random.toString('hex'); //解除用キーワード
-console.log("secret:" + secret);
-console.log("proof:" + proof);
+```cs
+var (proof, secret) = Crypto.CreateHash256Pair();
+Console.WriteLine($"secret: {Converter.BytesToHex(secret)}"); //ロック用キーワード
+Console.WriteLine($"proof: {Converter.BytesToHex(proof)}"); //解除用キーワード
 ```
 
 ###### 出力例
-```js
-> secret:f260bfb53478f163ee61ee3e5fb7cfcaf7f0b663bc9dd4c537b958d4ce00e240
-  proof:7944496ac0f572173c2549baf9ac18f893aab6d0
+```cs
+> secret: 84DC2F922F1A7F42A29C0CF350A193BA035FB3B84DDF7F1E97979CD3AC90FEF5
+proof: 99BA16BDC20BBE77617993AB21877D0C8E71C147
 ```
 
 トランザクションを作成・署名・アナウンスします
-```js
-lockTx = sym.SecretLockTransaction.create(
-    sym.Deadline.create(epochAdjustment),
-    new sym.Mosaic(
-      new sym.NamespaceId("symbol.xym"),
-      sym.UInt64.fromUint(1000000) //1XYM
-    ), //ロックするモザイク
-    sym.UInt64.fromUint(480), //ロック期間(ブロック数)
-    sym.LockHashAlgorithm.Op_Sha3_256, //ロックキーワード生成に使用したアルゴリズム
-    secret, //ロック用キーワード
-    bob.address, //解除時の転送先:Bob
-    networkType
-).setMaxFee(100);
+```cs
+var namespaceId = IdGenerator.GenerateNamespaceId("symbol.xym");
+var lockTx = new SecretLockTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    RecipientAddress = new UnresolvedAddress(bobAddress.bytes), //解除時の転送先:Bob
+    Mosaic = new UnresolvedMosaic
+    {
+        MosaicId = new UnresolvedMosaicId(namespaceId),
+        Amount = new Amount(1000000) //1XYM
+    }, //ロックするモザイク
+    Secret = new Hash256(secret), //ロック用キーワード
+    Duration = new BlockDuration(480), //ロック期間(ブロック数)
+    HashAlgorithm = new LockHashAlgorithm(0), //ロックキーワード生成に使用したアルゴリズム
+    SignerPublicKey = alicePublicKey,
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp),
+};
+TransactionHelper.SetMaxFee(lockTx, 100);
 
-signedLockTx = alice.sign(lockTx,generationHash);
-await txRepo.announce(signedLockTx).toPromise();
+var signature = facade.SignTransaction(aliceKeyPair, lockTx);
+var payload = TransactionsFactory.AttachSignature(lockTx, signature);
+var result = await Announce(payload);
+Console.WriteLine(result);
 ```
 
 LockHashAlgorithmは以下の通りです。
 ```js
-{0: 'Op_Sha3_256', 1: 'Op_Hash_160', 2: 'Op_Hash_256'}
+{0: 'SHA3_256', 1: 'HASH_160', 2: 'HASH_256'}
 ```
 
 ロック時に解除先を指定するのでBob以外のアカウントが解除しても転送先（Bob）を変更することはできません。
 ロック期間は最長で365日(ブロック数を日換算)までです。
 
-承認されたトランザクションを確認します。
-```js
-slRepo = repo.createSecretLockRepository();
-res = await slRepo.search({secret:secret}).toPromise();
-console.log(res.data[0]);
+承認されたトランザクションを確認します。<br>
+https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Secret-Lock-routes/operation/searchSecretLock
+```cs
+var param = $"/lock/secret?secret=196191F74708E2B4A52AEB643A3BA7E19655A64E7FAC6FBBA4F267BC18EDFF9E";
+var secretLockInfo = JsonNode.Parse(await GetDataFromApi(node, param));
+Console.WriteLine($"SecretLockInfo: {secretLockInfo}");
 ```
 ###### 出力例
-```js
+```cs
 > SecretLockInfo
     amount: UInt64 {lower: 1000000, higher: 0}
     compositeHash: "770F65CB0CC0CA17370DE961B2AA5B48B8D86D6DB422171AB00DF34D19DEE2F1"
@@ -186,86 +248,131 @@ console.log(res.data[0]);
     secret: "F260BFB53478F163EE61EE3E5FB7CFCAF7F0B663BC9DD4C537B958D4CE00E240"
     status: 0
     version: 1
+> SecretLockInfo: {
+  "data": [
+    {
+      "lock": {
+        "version": 1,
+        "ownerAddress": "982982FFFC666CB09288FCB4B8F820E8B0B5F77093075AEF",
+        "mosaicId": "72C0212E67A08BCE",
+        "amount": "1000000",
+        "endHeight": "377073",
+        "status": 0,
+        "hashAlgorithm": 0,
+        "secret": "196191F74708E2B4A52AEB643A3BA7E19655A64E7FAC6FBBA4F267BC18EDFF9E",
+        "recipientAddress": "983AB360969797AB6030FF53A1995F43B27C56C5B456E2D9",
+        "compositeHash": "4848923EAC8E9F0874B9682075718E868F416ED73BD0A5CBBD3610034B5EB698"
+      },
 ```
 ロックしたAliceがownerAddress、受信予定のBobがrecipientAddressに記録されています。
-secret情報が公開されていて、これに対応するproofをBobがネットワークに通知します。
 
+secret情報が公開されていて、これに対応するproofをBobがネットワークに通知します。
 
 ### シークレットプルーフ
 
 解除用キーワードを使用してロック解除します。
 Bobは事前に解除用キーワードを入手しておく必要があります。
 
-```js
-proofTx = sym.SecretProofTransaction.create(
-    sym.Deadline.create(epochAdjustment),
-    sym.LockHashAlgorithm.Op_Sha3_256, //ロック作成に使用したアルゴリズム
-    secret, //ロックキーワード
-    bob.address, //解除アカウント（受信アカウント）
-    proof, //解除用キーワード
-    networkType
-).setMaxFee(100);
+```cs
+var secret = Converter.HexToBytes("196191F74708E2B4A52AEB643A3BA7E19655A64E7FAC6FBBA4F267BC18EDFF9E"); //ロックキーワード
+var proof = Converter.HexToBytes("91B7E1E02D98C8DB6CFA90AF810D120FED9D854E"); //解除用キーワード
+var proofTx = new SecretProofTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    RecipientAddress = new UnresolvedAddress(bobAddress.bytes), //解除アカウント（受信アカウント）
+    Proof = proof,
+    Secret = new Hash256(secret), //ロックキーワード
+    HashAlgorithm = new LockHashAlgorithm(0), //ロック作成に使用したアルゴリズム
+    SignerPublicKey = bobPublicKey,
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp),
+};
+TransactionHelper.SetMaxFee(proofTx, 100);
 
-signedProofTx = bob.sign(proofTx,generationHash);
-await txRepo.announce(signedProofTx).toPromise();
+var signature = facade.SignTransaction(bobKeyPair, proofTx);
+var hash = facade.HashTransaction(proofTx);
+Console.WriteLine(hash);
+var payload = TransactionsFactory.AttachSignature(proofTx, signature);
+var result = await Announce(payload);
+Console.WriteLine(result);
 ```
 
 承認結果を確認します。
-```js
-txInfo = await txRepo.getTransaction(signedProofTx.hash,sym.TransactionGroup.Confirmed).toPromise();
-console.log(txInfo);
+```cs
+var hash = "1FB012172203DAA7BEDB527E7123552B42B589D7A01A299368B49B2CA7EDB9B1";
+var param = $"/transactions/confirmed/{hash}";
+var transactionInfo = JsonNode.Parse(await GetDataFromApi(node, param));
+Console.WriteLine($"SecretProofTransaction: {transactionInfo}");
 ```
 ###### 出力例
 ```js
-> SecretProofTransaction
-  > deadline: Deadline {adjustedValue: 12669305546}
-    hashAlgorithm: 0
-    maxFee: UInt64 {lower: 20700, higher: 0}
-    networkType: 152
-    payloadSize: 207
-    proof: "A6431E74005585779AD5343E2AC5E9DC4FB1C69E"
-    recipientAddress: Address {address: 'TBTWKXCNROT65CJHEBPL7F6DRHX7UKSUPD7EUGA', networkType: 152}
-    secret: "4C116F32D986371D6BCC44CE64C970B6567686E79850E4A4112AF869580B7C3C"
-    signature: "951F440860E8F24F6F3AB8EC670A3D448B12D75AB954012D9DB70030E31DA00B965003D88B7B94381761234D5A66BE989B5A8009BB234716CA3E5847C33F7005"
-    signer: PublicAccount {publicKey: '9DC9AE081DF2E76554084DFBCCF2BC992042AA81E8893F26F8504FCED3692CFB', address: Address}
-  > transactionInfo: TransactionInfo
-        hash: "85044FF702A6966AB13D05DBE4AC4C3A13520C7381F32540429987C207B2056B"
-        height: UInt64 {lower: 323805, higher: 0}
-        id: "6260CC7F60EE2B0EA10CCEDA"
-        merkleComponentHash: "85044FF702A6966AB13D05DBE4AC4C3A13520C7381F32540429987C207B2056B"
-    type: 16978
+> SecretProofTransaction: {
+  "meta": {
+    "height": "376618",
+    "hash": "1FB012172203DAA7BEDB527E7123552B42B589D7A01A299368B49B2CA7EDB9B1",
+    "merkleComponentHash": "1FB012172203DAA7BEDB527E7123552B42B589D7A01A299368B49B2CA7EDB9B1",
+    "index": 0,
+    "timestamp": "14127260541",
+    "feeMultiplier": 100
+  },
+  "transaction": {
+    "size": 207,
+    "signature": "BA95A3E60DF8050DEED546883EF952BAAD220D2D0E4EF4AF8E7282A399738613429369AACB14AFC9BB649E65CCB0142AD2BBCA0556CCFBBC03BC61C068B57300",
+    "signerPublicKey": "4C4BD7F8E1E1AC61DB817089F9416A7EDC18339F06CDC851495B271533FAD13B",
+    "version": 1,
+    "network": 152,
+    "type": 16978,
+    "maxFee": "20700",
+    "deadline": "14134446056",
+    "hashAlgorithm": 0,
+    "secret": "196191F74708E2B4A52AEB643A3BA7E19655A64E7FAC6FBBA4F267BC18EDFF9E",
+    "recipientAddress": "983AB360969797AB6030FF53A1995F43B27C56C5B456E2D9",
+    "proof": "91B7E1E02D98C8DB6CFA90AF810D120FED9D854E"
+  },
+  "id": "6437C9C0D7D26E76F9296B3A"
+}
 ```
 
 SecretProofTransactionにはモザイクの受信量の情報は含まれていません。
 ブロック生成時に作成されるレシートで受信量を確認します。
-レシートタイプ:LockHash_Completed でBob宛のレシートを検索してみます。
+レシートタイプ:LockSecret_Completed(8786) でBob宛のレシートを検索してみます。<br>
+https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Receipt-routes/operation/searchReceipts
 
-```js
-receiptRepo = repo.createReceiptRepository();
-
-receiptInfo = await receiptRepo.searchReceipts({
-    receiptType:sym.ReceiptTypeLockHash_Completed,
-    targetAddress:bob.address
-}).toPromise();
-console.log(receiptInfo.data);
+```cs
+var param = $"/statements/transaction?targetAddress={bobAddress}&receiptType=8786&order=desc";
+var receiptInfo = JsonNode.Parse(await GetDataFromApi(node, param));
+Console.WriteLine($"ReceiptInfo: {receiptInfo}");
 ```
 ###### 出力例
-```js
-> data: Array(1)
-  >  0: TransactionStatement
-        height: UInt64 {lower: 323805, higher: 0}
-     >  receipts: Array(1)
-          > 0: BalanceChangeReceipt
-                amount: UInt64 {lower: 1000000, higher: 0}
-            > mosaicId: MosaicId
-                  id: Id {lower: 760461000, higher: 981735131}
-              targetAddress: Address {address: 'TBTWKXCNROT65CJHEBPL7F6DRHX7UKSUPD7EUGA', networkType: 152}
-              type: 8786
+```cs
+> ReceiptInfo: {
+  "data": [
+    {
+      "statement": {
+        "height": "376618",
+        "source": {
+          "primaryId": 1,
+          "secondaryId": 0
+        },
+        "receipts": [
+          {
+            "version": 1,
+            "type": 8786,
+            "targetAddress": "983AB360969797AB6030FF53A1995F43B27C56C5B456E2D9",
+            "mosaicId": "72C0212E67A08BCE",
+            "amount": "1000000"
+          }
+        ]
+      },
+      "id": "6437C9C0D7D26E76F9296B3C",
+      "meta": {
+        "timestamp": "14127260541"
+      }
+    },
 ```
 
 ReceiptTypeは以下の通りです。
 
-```js
+```cs
 {4685: 'Mosaic_Rental_Fee', 4942: 'Namespace_Rental_Fee', 8515: 'Harvest_Fee', 8776: 'LockHash_Completed', 8786: 'LockSecret_Completed', 9032: 'LockHash_Expired', 9042: 'LockSecret_Expired', 12616: 'LockHash_Created', 12626: 'LockSecret_Created', 16717: 'Mosaic_Expired', 16718: 'Namespace_Expired', 16974: 'Namespace_Deleted', 20803: 'Inflation', 57667: 'Transaction_Group', 61763: 'Address_Alias_Resolution', 62019: 'Mosaic_Alias_Resolution'}
 
 8786: 'LockSecret_Completed' :ロック解除完了

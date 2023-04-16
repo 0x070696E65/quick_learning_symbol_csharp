@@ -23,7 +23,7 @@ var tx = new AccountAddressRestrictionTransactionV1()
     Network = NetworkType.TESTNET,
     SignerPublicKey = carolKeyPair.PublicKey,
     Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp),
-    RestrictionFlags = new AccountRestrictionFlags(AccountRestrictionFlags.ADDRESS.Value), // Flag
+    RestrictionFlags = new AccountRestrictionFlags((ushort)new[] {AccountRestrictionFlags.ADDRESS,AccountRestrictionFlags.BLOCK}.ToList().Select(flag => (int)flag.Value).Sum()), // Flag
     RestrictionAdditions = new UnresolvedAddress[] { new (bobAddress.bytes) },　//設定アドレス
     //解除アドレスは空
 };
@@ -43,17 +43,16 @@ RestrictionFlagsについては以下の通りです。
 ```cs
 {1: 'ADDRESS', 2: 'MOSAIC_ID', 4: 'TRANSACTION_TYPE', 16384: 'OUTGOING', 32768: 'BLOCK'}
 ```
-今回は指定アドレスからのみ受信許可（AllowIncomingAddress）を設定したため、AccountRestrictionFlags.ADDRESSの値を引数にしてFlagsを作成しました。
 
 この設定を解除する際は`RestrictionDeletions = new UnresolvedAddress[] { new (bobAddress.bytes) },`として同じFlagsでトランザクションを構築します。
 
-AddressRestrictionFlagにはAllowIncomingAddressのほか、下記のようなフラグが使用できます。
+AddressRestrictionFlagにはBlockIncomingAddressのほか、下記のようなフラグが使用できます。
 - AllowIncomingAddress(1)：指定アドレスからのみ受信許可
 - AllowOutgoingAddress(16385)：指定アドレス宛のみ送信許可
 - BlockIncomingAddress(32769)：指定アドレスからの受信受拒否
 - BlockOutgoingAddress(49153)：指定アドレス宛への送信禁止
 
-これらのRestrictionFlags指定は値を加算します。
+これらのRestrictionFlags指定は以下を参考にしてください。
 ```cs
 // AllowIncomingAddress
 RestrictionFlags = new AccountRestrictionFlags(AccountRestrictionFlags.ADDRESS.Value),

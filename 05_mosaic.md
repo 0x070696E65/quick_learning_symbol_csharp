@@ -109,10 +109,8 @@ Console.WriteLine(result);
 
 https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Mosaic-routes/operation/getMosaic
 
-```js
-var param = $"/mosaics/{mosaicId:X8}";
-var jsonString = await GetDataFromApi(node, param);
-var mosaic = JsonNode.Parse(jsonString);
+```cs
+var mosaic = JsonNode.Parse( await GetDataFromApi(node, $"/mosaics/{mosaicId:X8}"));
 Console.WriteLine($"Mosaic: {mosaic}");
 ```
 ###### 出力例
@@ -188,10 +186,7 @@ XYMは可分性6なので、1XYM=1000000で指定します。
 ### 送信確認
 
 ```cs
-var param = $"/transactions/confirmed/{hash}";
-var jsonString = await GetDataFromApi(node, param);
-Console.WriteLine(jsonString);
-var transaction = JsonNode.Parse(jsonString);
+var transaction = JsonNode.Parse(await GetDataFromApi(node, $"/transactions/confirmed/{hash}"));
 Console.WriteLine($"Transaction: {transaction}");
 ```
 ###### 出力例

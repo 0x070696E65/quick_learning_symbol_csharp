@@ -173,8 +173,7 @@ namespace AccountApi
 
 
 ```cs
-var param = $"/accounts/{aliceAddress}";
-var account = JsonSerializer.Deserialize<AccountApi.AccountRoot>(await GetDataFromApi(node, param));
+var account = JsonSerializer.Deserialize<AccountApi.AccountRoot>(await GetDataFromApi(node, $"/accounts/{aliceAddress}"));
 if (account == null) throw new NullReferenceException("account is null");
 foreach (var mosaic in account.account.mosaics)
     Console.WriteLine($"{mosaic.id} : {mosaic.amount}");
@@ -202,8 +201,7 @@ using System.Text.Json.Nodes;
 
 foreach (var mosaic in account.account.mosaics)
 {
-    var mParam = $"/mosaics/{mosaic.id}";
-    var m = JsonNode.Parse(await GetDataFromApi(node, mParam));
+    var m = JsonNode.Parse(await GetDataFromApi(node, $"/mosaics/{mosaic.id}"));
     var divisibility = (int)m["mosaic"]["divisibility"];
     var displayAmount = "";
     displayAmount = divisibility > 0 ? (double.Parse(mosaic.amount) / MathF.Pow(10, divisibility)).ToString(CultureInfo.InvariantCulture) : mosaic.amount;

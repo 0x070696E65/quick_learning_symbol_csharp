@@ -106,11 +106,9 @@ static bool ValidateTransactionInBlock(string leaf, string hRoot, List<JsonNode>
     return hRoot.ToUpper() == hRoot0.ToUpper();
 }
 
-var blockParam = $"/blocks/{height}";
-var blokInfo = JsonNode.Parse(await GetDataFromApi(node, blockParam));
+var blokInfo = JsonNode.Parse(await GetDataFromApi(node, $"/blocks/{height}"));
 
-var param = $"/blocks/{height}/transactions/{Converter.BytesToHex(merkleComponentHash)}/merkle";
-var merkleInfo = JsonNode.Parse(await GetDataFromApi(node, param));
+var merkleInfo = JsonNode.Parse(await GetDataFromApi(node, $"/blocks/{height}/transactions/{Converter.BytesToHex(merkleComponentHash)}/merkle"));
 //トランザクションから計算
 var leaf = Converter.BytesToHex(merkleComponentHash);
 //ノードから取得

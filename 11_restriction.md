@@ -155,8 +155,7 @@ BlockOutgoingTransactionTypeを指定する場合は、ACCOUNT_OPERATION_RESTRIC
 https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Restriction-Account-routes/operation/getAccountRestrictions
 
 ```cs
-var param = $"/restrictions/account/{carolAddress}";
-var restrictionsinfo = JsonNode.Parse(await GetDataFromApi(node, param));
+var restrictionsinfo = JsonNode.Parse(await GetDataFromApi(node, $"/restrictions/account/{carolAddress}"));
 Console.WriteLine($"AccountRestrictions: {restrictionsinfo}");
 ```
 ###### 出力例
@@ -342,8 +341,7 @@ Console.WriteLine(result2);
 https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Restriction-Mosaic-routes/operation/searchMosaicRestrictions
 
 ```cs
-var param = $"/restrictions/mosaic?mosaicId=388F6F55BE55BB6E";
-var mosaicRestrictionsInfo = JsonNode.Parse(await GetDataFromApi(node, param));
+var mosaicRestrictionsInfo = JsonNode.Parse(await GetDataFromApi(node, $"/restrictions/mosaic?mosaicId=388F6F55BE55BB6E"));
 Console.WriteLine($"MosaicRestrictions: {mosaicRestrictionsInfo}");
 ```
 

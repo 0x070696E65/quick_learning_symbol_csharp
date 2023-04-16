@@ -193,8 +193,7 @@ Uncaught Error: {"statusCode":409,"statusMessage":"Unknown Error","body":"{\"cod
 ノードに受理されたトランザクションのステータスを確認
 
 ```cs
-var param = $"/transactionStatus/{hash}";
-var transactionStatus = JsonNode.Parse(await GetDataFromApi(node, param));
+var transactionStatus = JsonNode.Parse(await GetDataFromApi(node, $"/transactionStatus/{hash}"));
 Console.WriteLine(transactionStatus);
 ```
 ###### 出力例
@@ -254,8 +253,7 @@ Console.WriteLine(hash);
 #### REST APIで確認
 
 ```cs
-var param = $"/transactions/confirmed/{hash}";
-var jsonString = await GetDataFromApi(node, param);
+var jsonString = await GetDataFromApi(node, $"/transactions/confirmed/{hash}");
 Console.WriteLine(jsonString);
 var transaction = JsonNode.Parse(jsonString);
 Console.WriteLine($"Signature: {transaction["transaction"]["signature"]}");
@@ -305,9 +303,7 @@ https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Transaction-routes/operation
 
 以下のように取得します。例では最初のトランザクションのハッシュを出力していますがご自身の必要な情報に合わせてください。
 ```cs
-var param = $"/transactions/confirmed?embedded=true&address={aliceAddress}";
-var jsonString = await GetDataFromApi(node, param);
-var transactions = JsonNode.Parse(await GetDataFromApi(node, param));
+var transactions = JsonNode.Parse(await GetDataFromApi(node, $"/transactions/confirmed?embedded=true&address={aliceAddress}"));
 Console.WriteLine(transactions["data"]);
 ```
 ###### 出力例

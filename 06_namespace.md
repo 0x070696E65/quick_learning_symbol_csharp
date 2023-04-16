@@ -13,9 +13,7 @@ Symbolブロックチェーンではネームスペースをレンタルして�
 https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Network-routes/operation/getRentalFees
 
 ```cs
-const string param = $"/network/fees/rental";
-var jsonString = await GetDataFromApi(node, param);
-var rentalFees = JsonNode.Parse(jsonString);
+var rentalFees = JsonNode.Parse(await GetDataFromApi(node, $"/network/fees/rental"));
 var rootNsperBlock = int.Parse((string)rentalFees["effectiveRootNamespaceRentalFeePerBlock"]);
 const int rentalDays = 365;
 const int rentalBlock = rentalDays * 24 * 60 * 60 / 30;
@@ -128,17 +126,13 @@ block<br>
 https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Block-routes
 
 ```cs
-var namespaceId = IdGenerator.GenerateNamespaceId("xembook");
-var namespaceParam = $"/namespaces/{namespaceId:X16}";
-var namespaceInfo = JsonNode.Parse(await GetDataFromApi(node, namespaceParam));
+var namespaceInfo = JsonNode.Parse(await GetDataFromApi(node, $"/namespaces/{namespaceId:X16}"));
 var endHeight = ulong.Parse((string)namespaceInfo["namespace"]["endHeight"]);
 
-var chainParam = "/chain/info";
-var chainInfo = JsonNode.Parse(await GetDataFromApi(node, chainParam));
+var chainInfo = JsonNode.Parse(await GetDataFromApi(node, "/chain/info"));
 var lastHeight = ulong.Parse((string)chainInfo["height"]);
 
-var blockParam = $"/blocks/{lastHeight}";
-var blockInfo = JsonNode.Parse(await GetDataFromApi(node, blockParam));
+var blockInfo = JsonNode.Parse(await GetDataFromApi(node, $"/blocks/{lastHeight}"));
 var timestamp = ulong.Parse((string)blockInfo["block"]["timestamp"]);
 
 var remainHeight = endHeight - lastHeight;
@@ -265,10 +259,7 @@ namespaceId.ToString("X8")
 アドレスへリンクしたネームスペースの参照します
 ```cs
 var namespaceId = IdGenerator.GenerateNamespaceId("xembook");
-var param = $"/namespaces/{namespaceId:X8}";
-var jsonString = await GetDataFromApi(node, param);
-Console.WriteLine(jsonString);
-var namespaceInfo = JsonNode.Parse(jsonString);
+var namespaceInfo = JsonNode.Parse(await GetDataFromApi(node, $"/namespaces/{namespaceId:X8}"));
 Console.WriteLine($"NamespaceInfo: {namespaceInfo}");
 ```
 ###### 出力例
@@ -309,9 +300,7 @@ registrationTypeは以下の通りです。
 モザイクへリンクしたネームスペースを参照します。
 ```cs
 var namespaceId = IdGenerator.GenerateNamespaceId("xembook.tomato");
-var param = $"/namespaces/{namespaceId:X8}";
-var jsonString = await GetDataFromApi(node, param);
-var namespaceInfo = JsonNode.Parse(jsonString);
+var namespaceInfo = JsonNode.Parse(await GetDataFromApi(node, $"/namespaces/{namespaceId:X8}"));
 Console.WriteLine($"NamespaceInfo: {namespaceInfo}");
 ```
 ###### 出力例
@@ -347,7 +336,6 @@ NamespaceInfo: {
 https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Namespace-routes/operation/getAccountsNames
 
 ```cs
-var param = $"/namespaces/account/names";
 var obj = new Dictionary<string, string[]>()
 {
     {
@@ -358,8 +346,7 @@ var obj = new Dictionary<string, string[]>()
     }
 };
 
-var jsonString = await PostDataFromApi(node, param, obj);
-var namespaceInfo = JsonNode.Parse(jsonString);
+var namespaceInfo = JsonNode.Parse(await PostDataFromApi(node, $"/namespaces/account/names", obj));
 foreach (var name in (IEnumerable)namespaceInfo["accountNames"][0]["names"])
 {
     Console.WriteLine(name);
@@ -369,7 +356,6 @@ foreach (var name in (IEnumerable)namespaceInfo["accountNames"][0]["names"])
 モザイクに紐づけられたネームスペースを全て調べます。<br>
 https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Namespace-routes/operation/getMosaicsNames
 ```cs
-var param = $"/namespaces/mosaic/names";
 var obj = new Dictionary<string, string[]>()
 {
     {
@@ -380,8 +366,7 @@ var obj = new Dictionary<string, string[]>()
     }
 };
 
-var jsonString = await PostDataFromApi(node, param, obj);
-var namespaceInfo = JsonNode.Parse(jsonString);
+var namespaceInfo = JsonNode.Parse(await PostDataFromApi(node, $"/namespaces/mosaic/names", obj));
 foreach (var name in (IEnumerable)namespaceInfo["mosaicNames"][0]["names"])
 {
     Console.WriteLine(name);
@@ -397,9 +382,7 @@ foreach (var name in (IEnumerable)namespaceInfo["mosaicNames"][0]["names"])
 https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Receipt-routes/operation/searchAddressResolutionStatements
 
 ```cs
-var param = $"/statements/resolutions/address?height=373690";
-var jsonString = await GetDataFromApi(node, param);
-var state = JsonNode.Parse(jsonString);
+var state = JsonNode.Parse(await GetDataFromApi(node, $"/statements/resolutions/address?height=373690"));
 Console.WriteLine(state);
 ```
 ###### 出力例
@@ -437,9 +420,7 @@ Console.WriteLine(state);
 https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Receipt-routes/operation/searchMosaicResolutionStatements
 
 ```cs
-var param = $"/statements/resolutions/mosaic?height=373694";
-var jsonString = await GetDataFromApi(node, param);
-var state = JsonNode.Parse(jsonString);
+var state = JsonNode.Parse(await GetDataFromApi(node, $"/statements/resolutions/mosaic?height=373694"));
 Console.WriteLine(state);
 ```
 ###### 出力例

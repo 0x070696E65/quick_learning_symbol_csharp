@@ -126,8 +126,7 @@ Console.WriteLine(result);
 https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Multisig-routes/operation/getAccountMultisig
 
 ```cs
-var param = $"/account/{bobAddress}/multisig";
-var multisigAccountInfo = JsonNode.Parse(await GetDataFromApi(node, param));
+var multisigAccountInfo = JsonNode.Parse(await GetDataFromApi(node, $"/account/{bobAddress}/multisig"));
 Console.WriteLine($"MultisigAccountInfo: {multisigAccountInfo}");
 ```
 ###### 出力例
@@ -155,8 +154,7 @@ minRemoval: 3により連署者を取り外すために必要な署名者数は3
 
 ### 連署者アカウントの確認
 ```cs
-var param = $"/account/{carol1Address}/multisig";
-var multisigAccountInfo = JsonNode.Parse(await GetDataFromApi(node, param));
+var multisigAccountInfo = JsonNode.Parse(await GetDataFromApi(node, $"/account/{carol1Address}/multisig"));
 Console.WriteLine($"MultisigAccountInfo: {multisigAccountInfo}");
 ```
 ###### 出力例
@@ -322,8 +320,7 @@ var result = await AnnounceBonded(payload);
 
 ```cs
 var hash = "EFCD8B70E854BDE519E6D576DF563BF22351338A6453EF87372072231140B674";
-var param = $"/transactions/confirmed/{hash}";
-var txInfo = JsonNode.Parse(await GetDataFromApi(node, param));
+var txInfo = JsonNode.Parse(await GetDataFromApi(node, $"/transactions/confirmed/{hash}"));
 Console.WriteLine($"TxInfo: {txInfo}");
 ```
 ###### 出力例

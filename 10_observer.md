@@ -407,9 +407,8 @@ await listener.AggregateBondedAdded(bobAddress.ToString(),async (tx)=>
 {
     //bobに関連するアグリゲートトランザクション検知
     var hash = tx["meta"]?["hash"]?.ToString();
-    var param = $"/transactions/partial/{hash}";
     //該当Hashのトランザクション情報取得
-    var txInfo = JsonNode.Parse(await GetDataFromApi(node, param));
+    var txInfo = JsonNode.Parse(await GetDataFromApi(node, $"/transactions/partial/{hash}"));
     foreach (JsonNode t in (IEnumerable) txInfo["transaction"]["transactions"])
     {
         // bobの署名が必要なトランザクションのフィルタリング

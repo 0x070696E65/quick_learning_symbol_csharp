@@ -178,9 +178,7 @@ Console.WriteLine(result);
 https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Metadata-routes/operation/searchMetadataEntries
 
 ```cs
-var param = $"/metadata?sourceAddress={aliceAddress}&targetAddress={aliceAddress}";
-var jsonString = await GetDataFromApi(node, param);
-var metadatas = JsonNode.Parse(jsonString);
+var metadatas = JsonNode.Parse(await GetDataFromApi(node, $"/metadata?sourceAddress={aliceAddress}&targetAddress={aliceAddress}"));
 Console.WriteLine(metadatas);
 ```
 ###### 出力例

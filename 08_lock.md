@@ -158,9 +158,7 @@ Console.WriteLine(result);
 https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Transaction-routes/operation/searchPartialTransactions
 
 ```cs
-var param = $"/transactions/partial?address={bobAddress}";
-var jsonString = await GetDataFromApi(node, param);
-var partial = JsonNode.Parse(jsonString);
+var partial = JsonNode.Parse(await GetDataFromApi(node, $"/transactions/partial?address={bobAddress}"));
 Console.WriteLine(partial);
 ```
 
@@ -230,8 +228,7 @@ LockHashAlgorithmは以下の通りです。
 承認されたトランザクションを確認します。<br>
 https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Secret-Lock-routes/operation/searchSecretLock
 ```cs
-var param = $"/lock/secret?secret=196191F74708E2B4A52AEB643A3BA7E19655A64E7FAC6FBBA4F267BC18EDFF9E";
-var secretLockInfo = JsonNode.Parse(await GetDataFromApi(node, param));
+var secretLockInfo = JsonNode.Parse(await GetDataFromApi(node, $"/lock/secret?secret=196191F74708E2B4A52AEB643A3BA7E19655A64E7FAC6FBBA4F267BC18EDFF9E"));
 Console.WriteLine($"SecretLockInfo: {secretLockInfo}");
 ```
 ###### 出力例
@@ -299,8 +296,7 @@ Console.WriteLine(result);
 承認結果を確認します。
 ```cs
 var hash = "1FB012172203DAA7BEDB527E7123552B42B589D7A01A299368B49B2CA7EDB9B1";
-var param = $"/transactions/confirmed/{hash}";
-var transactionInfo = JsonNode.Parse(await GetDataFromApi(node, param));
+var transactionInfo = JsonNode.Parse(await GetDataFromApi(node, $"/transactions/confirmed/{hash}"));
 Console.WriteLine($"SecretProofTransaction: {transactionInfo}");
 ```
 ###### 出力例
@@ -338,8 +334,7 @@ SecretProofTransactionにはモザイクの受信量の情報は含まれてい�
 https://symbol.github.io/symbol-openapi/v1.0.3/#tag/Receipt-routes/operation/searchReceipts
 
 ```cs
-var param = $"/statements/transaction?targetAddress={bobAddress}&receiptType=8786&order=desc";
-var receiptInfo = JsonNode.Parse(await GetDataFromApi(node, param));
+var receiptInfo = JsonNode.Parse(await GetDataFromApi(node, $"/statements/transaction?targetAddress={bobAddress}&receiptType=8786&order=desc"));
 Console.WriteLine($"ReceiptInfo: {receiptInfo}");
 ```
 ###### 出力例

@@ -49,7 +49,7 @@ RestrictionFlagsについては以下の通りです。
 AddressRestrictionFlagにはBlockIncomingAddressのほか、下記のようなフラグが使用できます。
 - AllowIncomingAddress(1)：指定アドレスからのみ受信許可
 - AllowOutgoingAddress(16385)：指定アドレス宛のみ送信許可
-- BlockIncomingAddress(32769)：指定アドレスからの受信受拒否
+- BlockIncomingAddress(32769)：指定アドレスからの受信拒否
 - BlockOutgoingAddress(49153)：指定アドレス宛への送信禁止
 
 これらのRestrictionFlags指定は以下を参考にしてください。

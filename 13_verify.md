@@ -24,7 +24,7 @@ var height = 381969;
 トランザクションの内容を確認します。
 
 ```cs
-var tx = TransactionHelper.TransactionDeserializer(payload, AggregateCompleteTransactionV2.Deserialize);
+var tx = TransactionFactory.Deserialize(payload);
 var hash = facade.HashTransaction(tx, tx.Signature);
 Console.WriteLine(hash);
 Console.WriteLine(tx);

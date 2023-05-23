@@ -309,6 +309,23 @@ var transferable = false; //第三者への譲渡可否
 var revokable = true; //発行者からの還収可否
 ```
 
+トランザクションは以下のように記述します。
+
+```cs
+var revocationTx = new MosaicSupplyRevocationTransactionV1()
+{
+    Network = NetworkType.TESTNET,
+    Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp), //Deadline:有効期限
+    SourceAddress = new UnresolvedAddress(bobAddress.bytes), //回収先アドレス
+    Mosaic = new UnresolvedMosaic()
+    {
+        MosaicId = new UnresolvedMosaicId(mosaicId),
+        Amount = new Amount(3)
+    }
+};
+TransactionHelper.SetMaxFee(revocationTx, 100);
+```
+
 
 
 

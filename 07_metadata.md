@@ -10,7 +10,7 @@ Valueの最大値は1024バイトです。
 
 ```cs
 var key = IdGenerator.GenerateUlongKey("key_account");
-var value = "test";
+var valueBytes = Converter.Utf8ToBytes("test");
 
 var tx = new EmbeddedAccountMetadataTransactionV1()
 {
@@ -18,8 +18,8 @@ var tx = new EmbeddedAccountMetadataTransactionV1()
     SignerPublicKey = alicePublicKey,
     TargetAddress = new UnresolvedAddress(aliceAddress.bytes),
     ScopedMetadataKey = key,
-    Value = Converter.Utf8ToBytes(value),
-    ValueSizeDelta = (byte) value.Length
+    Value = valueBytes,
+    ValueSizeDelta = (byte) valueBytes.Length
 };
 var innerTransactions = new IBaseTransaction[] {tx};
 var merkleHash = SymbolFacade.HashEmbeddedTransactions(innerTransactions);
@@ -50,7 +50,7 @@ Console.WriteLine(result);
 
 ```cs
 var key = IdGenerator.GenerateUlongKey("key_account");
-var value = "test";
+var valueBytes = Converter.Utf8ToBytes("test");
 
 var tx = new EmbeddedAccountMetadataTransactionV1()
 {
@@ -58,8 +58,8 @@ var tx = new EmbeddedAccountMetadataTransactionV1()
     SignerPublicKey = alicePublicKey,
     TargetAddress = new UnresolvedAddress(bobAddress.bytes),
     ScopedMetadataKey = key,
-    Value = Converter.Utf8ToBytes(value),
-    ValueSizeDelta = (byte) value.Length
+    Value = valueBytes,
+    ValueSizeDelta = (byte) valueBytes.Length
 };
 var innerTransactions = new IBaseTransaction[] {tx};
 var merkleHash = SymbolFacade.HashEmbeddedTransactions(innerTransactions);
@@ -103,7 +103,7 @@ bobの秘密鍵が分からない場合はこの後の章で説明する
 
 ```cs
 var key = IdGenerator.GenerateUlongKey("key_mosaic");
-var value = "test";
+var valueBytes = Converter.Utf8ToBytes("test");
 
 var tx = new EmbeddedMosaicMetadataTransactionV1()
 {
@@ -112,8 +112,8 @@ var tx = new EmbeddedMosaicMetadataTransactionV1()
     TargetAddress = new UnresolvedAddress(aliceAddress.bytes), //モザイク作成者アドレス
     TargetMosaicId = new UnresolvedMosaicId(0x1F75D061E31413F7), // mosaic id
     ScopedMetadataKey = key, // Key
-    Value = Converter.Utf8ToBytes(value), // Value
-    ValueSizeDelta = (byte) value.Length
+    Value = valueBytes, // Value
+    ValueSizeDelta = (byte) valueBytes.Length
 };
 var innerTransactions = new IBaseTransaction[] {tx};
 var merkleHash = SymbolFacade.HashEmbeddedTransactions(innerTransactions);
@@ -142,7 +142,7 @@ Console.WriteLine(result);
 ```cs
 var namespaceId = IdGenerator.GenerateNamespaceId("xembook");
 var key = IdGenerator.GenerateUlongKey("key_namespace");
-var value = "test";
+var valueBytes = Converter.Utf8ToBytes("test");
 
 var tx = new EmbeddedNamespaceMetadataTransactionV1()
 {
@@ -151,8 +151,8 @@ var tx = new EmbeddedNamespaceMetadataTransactionV1()
     TargetAddress = new UnresolvedAddress(aliceAddress.bytes), //ネームスペースの作成者アドレス
     TargetNamespaceId = new NamespaceId(namespaceId),
     ScopedMetadataKey = key, //Key
-    Value = Converter.Utf8ToBytes(value), //Value
-    ValueSizeDelta = (byte) value.Length
+    Value = valueBytes, //Value
+    ValueSizeDelta = (byte) valueBytes.Length
 };
 var innerTransactions = new IBaseTransaction[] {tx};
 var merkleHash = SymbolFacade.HashEmbeddedTransactions(innerTransactions);

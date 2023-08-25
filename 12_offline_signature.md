@@ -105,7 +105,7 @@ var signedPayload = "5801000000000000F95F520DF1E08FA936F3C57E7150062BD8710FB8290
 var tx = TransactionFactory.Deserialize(signedPayload);
 var cosignatureHex = "00000000000000004C4BD7F8E1E1AC61DB817089F9416A7EDC18339F06CDC851495B271533FAD13B42C6293F8E8C2490260A452E2E8493D2CF03F733AD787C500941CC0043BCFE8E577D8480588094EB878696122809F8BB6CC285F6CB7E959733A1E2BBF8860B0B";
 var cosignature = TransactionHelper.CosignatureDeserializer(cosignatureHex);
-tx.Cosignatures = new[] {cosignature};
+(tx as AggregateCompleteTransactionV2)!.Cosignatures = new[] {cosignature};
 
 var payload = TransactionsFactory.CreatePayload(tx);
 var result = await Announce(payload);

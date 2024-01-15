@@ -8,8 +8,8 @@ C#を使用します。
 
 ### SDK
 symbol_cs_dual_sdk
-https://github.com/0x070696E65/symbol_cs_dual_sdk/releases
- 
+https://github.com/0x070696E65/symbol_cs_dual_sdk/
+
 ### リファレンス
 Symbol SDK for TypeScript and JavaScript  
 https://0x070696e65.github.io/symbol_cs_dual_sdk_reference/

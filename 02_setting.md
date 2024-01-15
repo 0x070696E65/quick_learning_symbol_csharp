@@ -7,11 +7,11 @@
 C#を使用します。
 
 ### SDK
-symbol_cs_dual_sdk
+symbol_cs_dual_sdk<br>
 https://github.com/0x070696E65/symbol_cs_dual_sdk/
 
 ### リファレンス
-Symbol SDK for TypeScript and JavaScript  
+Symbol SDK for TypeScript and JavaScript<br>
 https://0x070696e65.github.io/symbol_cs_dual_sdk_reference/
 
 Catapult REST Endpoints (1.0.3)  

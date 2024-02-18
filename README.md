@@ -1,8 +1,8 @@
 > [!WARNING]
-> 本ドキュメントで使用しているSDKは新たなSDKとして以下に生まれ変わりました
+> 本ドキュメントで使用しているSDKは新たなSDKとして以下に生まれ変わりました<br>
 > https://www.nuget.org/packages/SymbolSdk
 >
-> こちらのドキュメントも以下が上記SDKに合わせて書き換えたものです
+> こちらのドキュメントも以下が上記SDKに合わせて書き換えたものです<br>
 > https://github.com/0x070696E65/symbol_sdk/tree/main/sdk/csharp/quick_learning_symbol_csharp
 
 ### 今日から現場で使える
